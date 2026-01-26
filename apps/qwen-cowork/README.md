@@ -23,7 +23,7 @@ Agent Cowork is an open-source alternative to Claude Cowork — a desktop AI ass
 
 ## ✨ Why Agent Cowork?
 
-Claude Code is powerful — but it **only runs in the terminal**.
+Qwen Code is powerful — but it **only runs in the terminal**.
 
 That means:
 - ❌ No visual feedback for complex tasks
@@ -34,29 +34,22 @@ That means:
 
 - 🖥️ Runs as a **native desktop application**
 - 🤖 Acts as your **AI collaboration partner** for any task
-- 🔁 Reuses your **existing `~/.claude/settings.json`**
-- No development environment or Claude Code installation required.
+- 🔁 Reuses your **existing `~/.qwen/settings.json`**
+- No development environment or Qwen Code installation required.
 
 
 
 ## 🚀 Quick Start
 
-### Option 1: Download a Release
-
-👉 [Go to Releases](https://github.com/DevAgentForge/agent-cowork/releases)
-
-
-### Option 2: Build from Source
-
 #### Prerequisites
 
 - [Bun](https://bun.sh/) or Node.js 22+
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- [Qwen Code](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) installed and authenticated
 
 bash
 #### Clone the repository
-git clone https://github.com/DevAgentForge/agent-cowork.git
-cd agent-cowork
+git clone https://github.com/QwenLM/qwen-code-examples
+cd qwen-code-examples/apps/qwen-cowork
 
 #### Install dependencies
 bun install

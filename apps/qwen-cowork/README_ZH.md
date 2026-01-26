@@ -14,8 +14,6 @@
 
 一个**桌面 AI 助手**，帮助你完成**编程、文件管理以及任何你能描述的任务**，  
 
-强行兼容**Claude Code 完全相同的配置**，这意味着你可以使用任意兼容 Anthropic 的大模型来运行。
-
 > 不只是一个 GUI。  
 > 是真正的 AI 协作伙伴。  
 > 无需学习 Claude Agent SDK，使用该软件创建任务并选择任务路径即可。
@@ -25,30 +23,18 @@
 [https://github.com/user-attachments/assets/694430fb-9d4b-452e-8429-d9c565082f43](https://github.com/user-attachments/assets/8ce58c8b-4024-4c01-82ee-f8d8ed6d4bba)
 
 
-## 入群交流
-![24](https://github.com/user-attachments/assets/c75070a0-2d22-4515-aaff-3909ab8f234d)
-
 
 ## 🚀 快速开始
-
-
-### 方式一：下载安装包
-
-
-👉 [前往 Releases 下载](https://github.com/DevAgentForge/agent-cowork/releases)
-
-
-### 方式二：从源码构建
 
 #### 前置要求
 
 - [Bun](https://bun.sh/) 或 Node.js 18+
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 已安装并完成认证
+- [Qwen Code](https://qwenlm.github.io/qwen-code-docs/zh/users/overview/) 已安装并完成认证
 
 ```bash
 # 克隆仓库
-git clone https://github.com/DevAgentForge/agent-cowork.git
-cd agent-cowork
+git clone https://github.com/QwenLM/qwen-code-examples
+cd qwen-code-examples/apps/qwen-cowork
 
 # 安装依赖
 bun install
@@ -99,14 +85,14 @@ Agent Cowork 是你的 AI 协作伙伴，可以：
 * 完全控制 Claude 能做什么
 
 
-## 🔁 与 Claude Code 完全兼容
+## 🔁 与 Qwen Code 完全兼容
 
-Agent Cowork **与 Claude Code 共享配置**。
+Agent Cowork **与 Qwen Code 共享配置**。
 
 直接复用：
 
 ```text
-~/.claude/settings.json
+~/.qwen/settings.json
 ```
 
 这意味着：
@@ -116,7 +102,7 @@ Agent Cowork **与 Claude Code 共享配置**。
 * 相同的模型
 * 相同的行为
 
-> 配置一次 Claude Code — 到处使用。
+> 配置一次 Qwen Code — 到处使用。
 
 
 ## 🧩 架构概览
@@ -127,7 +113,7 @@ Agent Cowork **与 Claude Code 共享配置**。
 | 前端 | React 19, Tailwind CSS 4 |
 | 状态管理 | Zustand |
 | 数据库 | better-sqlite3 (WAL 模式) |
-| AI | @anthropic-ai/claude-agent-sdk |
+| AI | @qwen-code/sdk |
 | 构建 | Vite, electron-builder |
 
 
