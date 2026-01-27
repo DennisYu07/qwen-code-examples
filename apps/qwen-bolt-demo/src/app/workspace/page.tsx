@@ -43,6 +43,7 @@ function WorkspaceContent() {
   const [serverError, setServerError] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const hasInitializedRef = useRef(false);
 
   // 启动开发服务器
   const startDevServer = async () => {
@@ -108,9 +109,10 @@ function WorkspaceContent() {
     scrollToBottom();
   }, [messages, currentResponse]);
 
-  // 自动发送初始提示
+  // 自动发送初始提示（只执行一次）
   useEffect(() => {
-    if (initialPrompt && messages.length === 0) {
+    if (initialPrompt && messages.length === 0 && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       sendMessage(initialPrompt);
     }
   }, [initialPrompt]);
