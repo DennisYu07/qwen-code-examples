@@ -65,8 +65,10 @@ function WorkspaceContent() {
     serverError,
     devServerLogs,
     startDevServer,
-    refreshPreview
-  } = useDevServer(sessionId);
+    refreshPreview,
+    isWebContainerLoading,
+    webContainerError
+  } = useDevServer(sessionId, files);
 
   // 4. Resizable Terminal Panel
   const { 
@@ -82,17 +84,10 @@ function WorkspaceContent() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Cleanup: Stop dev server when component unmounts
-  useEffect(() => {
-    return () => {
-      if (sessionId && devServer) {
-        console.log('[Workspace] Stopping dev server on unmount...');
-        fetch(`/api/dev-server?sessionId=${sessionId}`, {
-          method: 'DELETE',
-        }).catch(err => console.error('[Workspace] Error stopping dev server:', err));
-      }
-    };
-  }, [sessionId, devServer]);
-
+  // With WebContainer, the browser manages the lifecycle, so explicit server-side cleanup is less critical for the runtime,
+  // but we might still want to clean up the session folder on the backend if needed.
+  // For now, we'll remove the explicit DELETE /api/dev-server call since we are using WebContainer.
+  
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

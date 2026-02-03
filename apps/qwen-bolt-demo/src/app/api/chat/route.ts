@@ -4,52 +4,12 @@ import { randomUUID } from 'crypto';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { buildPrompt, type HistoryMessage } from '@/lib/prompt-builder';
 
 export const runtime = 'nodejs';
 
-type HistoryMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-};
-
 // 存储会话的工作目录
 const sessionWorkspaces = new Map<string, string>();
-
-function buildPrompt(history: HistoryMessage[], message: string, knowledge?: string, filesContext?: string): string {
-  const parts: string[] = [];
-
-  // 系统级约束：knowledge 和 uploadedFiles 作为全局上下文，始终在最前面
-  const systemInstructions: string[] = [];
-  
-  if (knowledge && knowledge.trim()) {
-    systemInstructions.push(`<GLOBAL_INSTRUCTIONS>
-${knowledge.trim()}
-</GLOBAL_INSTRUCTIONS>`);
-  }
-  
-  if (filesContext && filesContext.trim()) {
-    systemInstructions.push(filesContext.trim());
-  }
-  
-  if (systemInstructions.length > 0) {
-    parts.push(`SYSTEM: You must follow these global instructions and use the provided context files in all your responses:
-
-${systemInstructions.join('\n\n')}
-
-These instructions and files apply to the entire conversation. Always consider them when responding to user requests.`);
-  }
-  
-  if (Array.isArray(history)) {
-    for (const item of history) {
-      if (!item?.content) continue;
-      const role = (item.role || 'user').toUpperCase();
-      parts.push(`${role}: ${item.content}`);
-    }
-  }
-  
-  parts.push(`USER: ${message}`);
-  return parts.join('\n\n');
-}
 
 // 🔥 关键修复：创建一个持续的生成器，而不是单次的
 async function* createPromptStream(
