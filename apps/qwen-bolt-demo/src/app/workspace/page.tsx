@@ -2,31 +2,21 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { 
-  Code2, 
-  Send, 
-  X,
-  Maximize2,
-  RotateCcw,
-  Sparkles,
-  Terminal,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  FileCode,
-  Columns,
-} from 'lucide-react';
-import CodeRenderer from '@/components/CodeRenderer';
-import { PlanMessage, containsPlan } from '@/components/PlanMessage';
-import { SummaryMessage, containsSummary } from '@/components/SummaryMessage';
+import { useProject } from '@/contexts/ProjectContext';
+import { useToken } from '@/contexts/TokenContext';
 import { TerminalPanel } from '@/components/TerminalPanel';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+import {
+  ChatHeader,
+  MessageList,
+  ChatInput,
+  ViewModeToggle,
+  CodePanel,
+  PreviewPanel,
+  Message,
+  AttachedFile,
+  ViewMode,
+  DevServer,
+} from '@/components/workspace';
 
 interface FileNode {
   name: string;
@@ -38,24 +28,41 @@ interface FileNode {
 function WorkspaceContent() {
   const searchParams = useSearchParams();
   const initialPrompt = searchParams.get('prompt') || '';
+  const { settings } = useProject();
+  const { addTokenUsage } = useToken();
   
+  // Chat state
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentResponse, setCurrentResponse] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  
+  // File state
   const [files, setFiles] = useState<Record<string, string>>({});
   const [activeFile, setActiveFile] = useState<string>('');
   const [sessionId, setSessionId] = useState<string>('');
+  
+  // Preview state
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const [devServer, setDevServer] = useState<{ port: number; framework: string; url: string } | null>(null);
+  const [devServer, setDevServer] = useState<DevServer | null>(null);
   const [isStartingServer, setIsStartingServer] = useState(false);
   const [serverError, setServerError] = useState<string>('');
   const [devServerLogs, setDevServerLogs] = useState<string[]>([]);
+  
+  // UI state
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
-  const [viewMode, setViewMode] = useState<'code' | 'preview'>('code');
+  const [viewMode, setViewMode] = useState<ViewMode>('code');
+  const [terminalHeight, setTerminalHeight] = useState(320); // Default height in pixels
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const hasInitializedRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
 
   // Cleanup: Stop dev server when component unmounts
   useEffect(() => {
@@ -75,17 +82,14 @@ function WorkspaceContent() {
 
     setIsStartingServer(true);
     setServerError('');
-    setDevServerLogs([]); // Clear previous logs
+    setDevServerLogs([]);
 
     try {
       console.log('[Workspace] Starting dev server for session:', sessionId);
-      
-      // Add initial log
       setDevServerLogs(prev => [...prev, `[DevServer API] Starting dev server for session: ${sessionId}`]);
       
-      // Set timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const response = await fetch('/api/dev-server', {
         method: 'POST',
@@ -99,37 +103,33 @@ function WorkspaceContent() {
       const data = await response.json();
       console.log('[Workspace] Dev server response:', data);
 
-      // Add logs from response
       if (data.logs && Array.isArray(data.logs)) {
         setDevServerLogs(prev => [...prev, ...data.logs]);
       }
 
       if (data.success) {
         if (data.type === 'static') {
-          // Static HTML project, use preview API directly
           setPreviewUrl(`/api/preview?sessionId=${sessionId}&t=${Date.now()}`);
           setDevServerLogs(prev => [...prev, '[DevServer] Static project detected, using preview API']);
         } else {
-          // Dynamic project, use development server
           setDevServer({
             port: data.port,
             framework: data.framework,
             url: data.url,
           });
-          // Set preview URL to development server address
           setPreviewUrl(`${data.url}?t=${Date.now()}`);
           setDevServerLogs(prev => [...prev, `[DevServer] Server started successfully on port ${data.port}`]);
         }
-        setServerError(''); // Clear error
+        setServerError('');
       } else {
         const errorMsg = data.error || 'Failed to start dev server';
         setServerError(errorMsg);
         setDevServerLogs(prev => [...prev, `[DevServer Error] ${errorMsg}`]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Workspace] Error starting dev server:', error);
       let errorMsg = '';
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         errorMsg = 'Server start timeout (2 minutes). The project may be too large or have dependency issues.';
       } else {
         errorMsg = error instanceof Error ? error.message : 'Failed to start dev server';
@@ -149,7 +149,7 @@ function WorkspaceContent() {
     scrollToBottom();
   }, [messages, currentResponse]);
 
-  // Auto-send initial prompt (execute only once)
+  // Auto-send initial prompt
   useEffect(() => {
     if (initialPrompt && messages.length === 0 && !hasInitializedRef.current) {
       hasInitializedRef.current = true;
@@ -183,7 +183,6 @@ function WorkspaceContent() {
         console.log('[loadAllFiles] Collected file paths:', filePaths);
         const fileContents: Record<string, string> = {};
 
-        // 并行加载所有文件内容
         await Promise.all(
           filePaths.map(async (path) => {
             try {
@@ -204,7 +203,6 @@ function WorkspaceContent() {
         console.log('[loadAllFiles] All files loaded:', Object.keys(fileContents));
         setFiles(fileContents);
         
-        // Set first file as active file
         if (filePaths.length > 0 && !activeFile) {
           console.log('[loadAllFiles] Setting active file:', filePaths[0]);
           setActiveFile(filePaths[0]);
@@ -217,30 +215,41 @@ function WorkspaceContent() {
     }
   };
 
-  // Update preview - Auto-preview logic removed, changed to manual button click
-  // const updatePreview = (sid: string) => {
-  //   setPreviewUrl(`/api/preview?sessionId=${sid}&t=${Date.now()}`);
-  // };
-
   const sendMessage = async (messageText?: string) => {
     const textToSend = messageText || input.trim();
     if (!textToSend || isLoading) return;
+
+    const currentAttachedFiles = [...attachedFiles];
 
     const userMessage: Message = {
       id: `user_${Date.now()}`,
       role: 'user',
       content: textToSend,
       timestamp: new Date(),
+      attachedFiles: currentAttachedFiles,
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
+    setAttachedFiles([]);
     setIsLoading(true);
     setCurrentResponse('');
 
     abortControllerRef.current = new AbortController();
 
     try {
+      const allUploadedFiles = [
+        ...settings.uploadedFiles,
+        ...attachedFiles.map(f => ({
+          id: f.id,
+          name: f.name,
+          path: f.path,
+          content: f.content,
+          type: 'file' as const,
+          size: f.size,
+        })),
+      ];
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,6 +257,9 @@ function WorkspaceContent() {
           message: userMessage.content,
           history: messages,
           sessionId: sessionId || undefined,
+          uploadedFiles: allUploadedFiles,
+          knowledge: settings.knowledge,
+          modelConfig: settings.modelConfig,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -273,35 +285,38 @@ function WorkspaceContent() {
                 try {
                   const parsed = JSON.parse(jsonStr);
 
-                  // Handle session info
                   if (parsed.type === 'session_info') {
                     currentSessionId = parsed.sessionId;
                     setSessionId(parsed.sessionId);
                     console.log('[Workspace] Session ID:', parsed.sessionId);
                   }
 
-                  // Handle file update notification
                   if (parsed.type === 'file_updated') {
                     console.log('[Workspace] File updated:', parsed.tool, parsed.input);
-                    // Refresh files immediately (no auto-preview)
                     if (currentSessionId) {
                       console.log('[Workspace] Triggering file reload for session:', currentSessionId);
                       loadAllFiles(currentSessionId);
-                      // Auto-preview removed, changed to manual button click
-                      // updatePreview(currentSessionId);
                     }
                   }
 
                   if (parsed.type === 'result') {
                     hasReceivedResult = true;
                     console.log('[Workspace] Received result, final refresh');
-                    // Final file refresh (no auto-preview)
+
+                    if (parsed.usage) {
+                      console.log('[Token] Found usage in result:', parsed.usage);
+                      const inputTokens = parsed.usage.input_tokens || parsed.usage.prompt_tokens || 0;
+                      const outputTokens = parsed.usage.output_tokens || parsed.usage.completion_tokens || 0;
+                      console.log('[Token] Result tokens - input:', inputTokens, 'output:', outputTokens);
+                      if (inputTokens > 0 || outputTokens > 0) {
+                        addTokenUsage(inputTokens, outputTokens);
+                        console.log('[Token] Updated token usage from result');
+                      }
+                    }
+
                     if (currentSessionId) {
-                      // Delay to ensure file write completion
                       setTimeout(() => {
                         loadAllFiles(currentSessionId);
-                        // Auto-preview removed, changed to manual button click
-                        // updatePreview(currentSessionId);
                       }, 1000);
                     }
                     break;
@@ -310,8 +325,8 @@ function WorkspaceContent() {
                   if (parsed.type === 'assistant' && parsed.message?.content) {
                     const textContent = Array.isArray(parsed.message.content)
                       ? parsed.message.content
-                          .filter((block: any) => block.type === 'text')
-                          .map((block: any) => block.text)
+                          .filter((block: { type: string }) => block.type === 'text')
+                          .map((block: { text: string }) => block.text)
                           .join('')
                       : parsed.message.content;
 
@@ -340,8 +355,8 @@ function WorkspaceContent() {
           setMessages(prev => [...prev, assistantMessage]);
         }
       }
-    } catch (error: any) {
-      if (error?.name !== 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Error sending message:', error);
       }
     } finally {
@@ -350,22 +365,57 @@ function WorkspaceContent() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
   // Handle file selection
   const handleSelectFile = (path: string) => {
     setActiveFile(path);
   };
 
-  // Handle code change (read-only mode, no implementation needed)
+  // Handle code change
   const handleCodeChange = (code: string, filename?: string) => {
     console.log('Code changed:', filename, code);
   };
+
+  // Handle preview refresh
+  const handlePreviewRefresh = () => {
+    setPreviewUrl(`${previewUrl.split('?t=')[0]}?t=${Date.now()}`);
+  };
+
+  // Handle open in new tab
+  const handleOpenInNewTab = () => {
+    window.open(previewUrl, '_blank');
+  };
+
+  // Handle terminal resize drag
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = terminalHeight;
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      
+      const deltaY = dragStartY.current - e.clientY;
+      const newHeight = Math.min(Math.max(dragStartHeight.current + deltaY, 100), 600);
+      setTerminalHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   // Debug log
   console.log('[Workspace Debug]', {
@@ -378,266 +428,84 @@ function WorkspaceContent() {
   });
 
   return (
-    <div className="flex h-screen bg-black text-white relative">
+    <div className="flex h-screen bg-white dark:bg-black text-gray-900 dark:text-white relative transition-colors">
       {/* Left: Chat area */}
-      <div className="w-96 flex flex-col border-r border-gray-800">
-        {/* Top toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-              <Code2 className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold">Qwen Coder</span>
-          </div>
-          <button className="p-1.5 hover:bg-white/10 rounded transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Message list */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((msg) => {
-            const isPlan = msg.role === 'assistant' && containsPlan(msg.content);
-            const isSummary = msg.role === 'assistant' && !isPlan && containsSummary(msg.content);
-            
-            return (
-              <div
-                key={msg.id}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {msg.role === 'user' ? (
-                  <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-blue-600 text-white">
-                    <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
-                  </div>
-                ) : isPlan ? (
-                  <div className="max-w-[85%]">
-                    <PlanMessage content={msg.content} />
-                  </div>
-                ) : isSummary ? (
-                  <div className="max-w-[85%]">
-                    <SummaryMessage content={msg.content} />
-                  </div>
-                ) : (
-                  <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-800 text-gray-100">
-                    <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {currentResponse && (
-            <div className="flex justify-start">
-              {containsPlan(currentResponse) ? (
-                <div className="max-w-[85%]">
-                  <PlanMessage content={currentResponse} />
-                  <div className="flex items-center mt-2 text-blue-400">
-                    <div className="animate-pulse">●</div>
-                    <span className="ml-2 text-xs">Typing...</span>
-                  </div>
-                </div>
-              ) : containsSummary(currentResponse) ? (
-                <div className="max-w-[85%]">
-                  <SummaryMessage content={currentResponse} />
-                  <div className="flex items-center mt-2 text-blue-400">
-                    <div className="animate-pulse">●</div>
-                    <span className="ml-2 text-xs">Typing...</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-gray-800">
-                  <div className="text-sm whitespace-pre-wrap break-words text-gray-100">
-                    {currentResponse}
-                  </div>
-                  <div className="flex items-center mt-2 text-blue-400">
-                    <div className="animate-pulse">●</div>
-                    <span className="ml-2 text-xs">Typing...</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input area */}
-        <div className="p-4 border-t border-gray-800">
-          <div className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="What would you like to build today?"
-              disabled={isLoading}
-              className="flex-1 px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              rows={2}
-            />
-            <button
-              onClick={() => sendMessage()}
-              disabled={isLoading || !input.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors flex items-center justify-center"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+      <div className="w-[480px] flex flex-col border-r border-gray-200/60 dark:border-gray-800/60">
+        <ChatHeader />
+        
+        <MessageList
+          messages={messages}
+          currentResponse={currentResponse}
+          messagesEndRef={messagesEndRef}
+        />
+        
+        <ChatInput
+          input={input}
+          isLoading={isLoading}
+          attachedFiles={attachedFiles}
+          onInputChange={setInput}
+          onSend={() => sendMessage()}
+          onFilesAttached={(newFiles) => setAttachedFiles(prev => [...prev, ...newFiles])}
+          onFileRemoved={(fileId) => setAttachedFiles(prev => prev.filter(f => f.id !== fileId))}
+          onFolderRemoved={(folderName) => setAttachedFiles(prev => prev.filter(f => f.folderName !== folderName))}
+        />
       </div>
 
-      {/* Middle & Right: Code editor and Preview with view mode toggle */}
+      {/* Middle & Right: Code editor and Preview */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* View mode toggle bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800">
-          <div className="flex items-center gap-1 bg-gray-900 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('code')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors ${
-                viewMode === 'code'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-              title="Code View"
-            >
-              <FileCode className="w-4 h-4" />
-              <span>Code</span>
-            </button>
-            <button
-              onClick={() => setViewMode('preview')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors ${
-                viewMode === 'preview'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-              title="Preview View"
-            >
-              <Eye className="w-4 h-4" />
-              <span>Preview</span>
-            </button>
-          </div>
-        </div>
+        <ViewModeToggle
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
 
-        {/* Content area - Split into main content and terminal */}
+        {/* Content area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Main content area */}
           <div className={`flex overflow-hidden ${isTerminalOpen ? 'flex-1' : 'h-full'}`}>
-            {/* Code editor */}
             {viewMode === 'code' && (
               <div className="w-full flex overflow-hidden">
-                {Object.keys(files).length > 0 ? (
-                  <CodeRenderer
-                    files={files}
-                    readOnly={true}
-                    isComplete={!isLoading}
-                    onCodeChange={handleCodeChange}
-                    activeFile={activeFile}
-                    onSelectFile={handleSelectFile}
-                    sessionId={sessionId}
-                  />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center bg-gray-900 text-gray-500">
-                    <div className="text-center">
-                      <Code2 className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                      <p className="text-lg font-medium">No files yet</p>
-                      <p className="text-sm mt-2">Start chatting with AI to generate your project</p>
-                    </div>
-                  </div>
-                )}
+                <CodePanel
+                  files={files}
+                  activeFile={activeFile}
+                  sessionId={sessionId}
+                  isLoading={isLoading}
+                  onSelectFile={handleSelectFile}
+                  onCodeChange={handleCodeChange}
+                />
               </div>
             )}
 
-            {/* Preview */}
             {viewMode === 'preview' && (
-              <div className="w-full flex flex-col bg-gray-900">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-800">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-white">Preview</h2>
-            {devServer && (
-              <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                {devServer.framework} • Port {devServer.port}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {!previewUrl && sessionId && Object.keys(files).length > 0 && (
-              <button
-                onClick={startDevServer}
-                disabled={isStartingServer}
-                className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors flex items-center gap-1.5"
-                title="Start Preview"
-              >
-                {isStartingServer ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Starting...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3 h-3" />
-                    Start Preview
-                  </>
-                )}
-              </button>
-            )}
-            {previewUrl && (
-              <>
-                <button
-                  onClick={() => setPreviewUrl(`${previewUrl.split('?t=')[0]}?t=${Date.now()}`)}
-                  className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-                  title="Refresh Preview"
-                >
-                  <RotateCcw className="w-4 h-4 text-gray-400" />
-                </button>
-                <button
-                  onClick={() => window.open(previewUrl, '_blank')}
-                  className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-                  title="Open in New Tab"
-                >
-                  <Maximize2 className="w-4 h-4 text-gray-400" />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 bg-white relative">
-          {previewUrl ? (
-            <iframe
-              src={previewUrl}
-              className="w-full h-full border-0"
-              title="Preview"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            />
-          ) : (
-            <div className="h-full flex items-center justify-center text-gray-500 bg-gray-900">
-              <div className="text-center px-8">
-                <Code2 className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                <p className="text-lg font-medium text-white">No Preview Available</p>
-                <p className="text-sm mt-2 text-gray-400">
-                  {Object.keys(files).length > 0
-                    ? 'Click "Start Preview" to run your app'
-                    : 'Start chatting with AI to generate your app'}
-                </p>
-                {serverError && (
-                  <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-xs text-left">
-                    <p className="font-semibold mb-1">Error starting preview:</p>
-                    <p className="font-mono">{serverError}</p>
-                  </div>
-                )}
-                {isStartingServer && (
-                  <div className="mt-4 flex items-center justify-center gap-2 text-blue-400">
-                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm">Starting development server...</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-              </div>
+              <PreviewPanel
+                previewUrl={previewUrl}
+                devServer={devServer}
+                isStartingServer={isStartingServer}
+                serverError={serverError}
+                sessionId={sessionId}
+                hasFiles={Object.keys(files).length > 0}
+                onStartServer={startDevServer}
+                onRefresh={handlePreviewRefresh}
+                onOpenInNewTab={handleOpenInNewTab}
+              />
             )}
           </div>
 
-          {/* Terminal Panel - Bottom section */}
-          <div className={`border-t border-gray-700 ${isTerminalOpen ? 'h-80' : 'h-auto'}`}>
+          {/* Terminal Panel with Resizable Handle */}
+          <div 
+            ref={containerRef}
+            className="flex flex-col"
+            style={{ height: isTerminalOpen ? terminalHeight : 'auto' }}
+          >
+            {/* Drag Handle - serves as both border and resize handle */}
+            <div
+              onMouseDown={isTerminalOpen ? handleDragStart : undefined}
+              className={`h-px flex-shrink-0 transition-colors ${
+                isTerminalOpen 
+                  ? `cursor-ns-resize ${isDragging ? 'bg-blue-500 h-0.5' : 'bg-gray-200/60 dark:bg-gray-800/60 hover:bg-blue-500/50'}`
+                  : 'bg-gray-200/60 dark:bg-gray-800/60'
+              }`}
+              title={isTerminalOpen ? "Drag to resize" : undefined}
+            />
             <TerminalPanel 
               devServerLogs={devServerLogs} 
               sessionId={sessionId}

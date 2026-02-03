@@ -52,17 +52,17 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
   const activeContent = getActiveContent();
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
       {/* Tab bar */}
-      <div className="flex items-center justify-between px-2 py-1 border-b border-gray-700 bg-gray-800">
+      <div className="flex items-center justify-between px-2 py-1 bg-white dark:bg-gray-900">
         <div className="flex items-center gap-1">
           {/* Dev Server tab */}
           <button
             onClick={() => setActiveTab('bolt')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors ${
               activeTab === 'bolt'
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
           >
             <span className="text-blue-400">🚀</span>
@@ -76,8 +76,8 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
               onClick={() => setActiveTab(terminal.id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors group ${
                 activeTab === terminal.id
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                  ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50'
               }`}
             >
               <TerminalIcon className="w-3 h-3" />
@@ -99,7 +99,7 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
           {/* Add terminal button */}
           <button
             onClick={addTerminal}
-            className="flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+            className="flex items-center justify-center w-6 h-6 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors"
             title="Add Terminal"
           >
             <Plus className="w-3 h-3" />
@@ -110,7 +110,7 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
         {onToggle && (
           <button
             onClick={onToggle}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700/50 transition-colors"
             title={isOpen ? 'Hide Terminal' : 'Show Terminal'}
           >
             <span>{isOpen ? 'Hide' : 'Show'}</span>
@@ -121,9 +121,9 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
 
       {/* Terminal content */}
       {isOpen && (
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-950">
+        <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950">
           {/* Output area */}
-          <div className="flex-1 overflow-y-auto p-3 font-mono text-xs text-gray-300">
+          <div className="flex-1 overflow-y-auto p-3 font-mono text-xs text-gray-800 dark:text-gray-100">
             {activeContent.length > 0 ? (
               <div className="space-y-1">
                 {activeContent.map((line, index) => (
@@ -133,7 +133,7 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
                 ))}
               </div>
             ) : (
-              <div className="text-gray-500 text-center py-8">
+              <div className="text-gray-500 dark:text-gray-500 text-center py-8">
                 {activeTab === 'bolt' && 'No development server logs yet'}
                 {activeTab.startsWith('terminal-') && 'Terminal ready'}
               </div>
@@ -142,12 +142,12 @@ export function TerminalPanel({ devServerLogs = [], sessionId, isOpen = true, on
 
           {/* Input area for Terminal tabs only */}
           {activeTab.startsWith('terminal-') && (
-            <div className="border-t border-gray-700 p-2 flex items-center gap-2">
+            <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex items-center gap-2">
               <span className="text-green-400 font-mono text-xs">$</span>
               <input
                 type="text"
                 placeholder="Enter command..."
-                className="flex-1 bg-transparent border-none outline-none text-gray-300 font-mono text-xs placeholder-gray-600"
+                className="flex-1 bg-transparent border-none outline-none text-gray-800 dark:text-gray-100 font-mono text-xs placeholder-gray-500 dark:placeholder-gray-400"
                 onKeyDown={async (e) => {
                   if (e.key === 'Enter') {
                     const input = e.currentTarget;

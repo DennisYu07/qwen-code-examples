@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MultiFileCodeRendererProps } from './types';
 import { FileTree } from './FileTree';
 import { CodeEditorPanel } from './CodeEditorPanel';
@@ -22,6 +22,10 @@ export const MultiFileCodeRenderer: React.FC<
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fileTreeWidth, setFileTreeWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
+  
+  // Refs for drag tracking
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(0);
 
   // Initialize active file
   useEffect(() => {
@@ -49,15 +53,22 @@ export const MultiFileCodeRenderer: React.FC<
     }
   };
 
-  // Handle resize
+  // Handle drag start
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = fileTreeWidth;
+  };
+
+  // Handle resize with proper delta tracking
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing) {
-        const newWidth = e.clientX - 384; // 384 is chat panel width
-        if (newWidth >= 200 && newWidth <= 600) {
-          setFileTreeWidth(newWidth);
-        }
-      }
+      if (!isResizing) return;
+      
+      const deltaX = e.clientX - dragStartX.current;
+      const newWidth = Math.min(Math.max(dragStartWidth.current + deltaX, 150), 500);
+      setFileTreeWidth(newWidth);
     };
 
     const handleMouseUp = () => {
@@ -83,7 +94,7 @@ export const MultiFileCodeRenderer: React.FC<
   }, [isResizing]);
 
   return (
-    <div className="relative flex h-full min-h-0 w-full bg-gray-900">
+    <div className="relative flex h-full min-h-0 w-full bg-gray-100 dark:bg-gray-900">
       {/* Sidebar */}
       {sidebarOpen && (
         <>
@@ -93,11 +104,10 @@ export const MultiFileCodeRenderer: React.FC<
           
           {/* Resize handle */}
           <div
-            className="w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize flex-shrink-0 group relative"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
+            className={`w-1 cursor-col-resize flex-shrink-0 group relative transition-colors ${
+              isResizing ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-700 hover:bg-blue-500/50'
+            }`}
+            onMouseDown={handleDragStart}
           >
             <div className="absolute inset-y-0 -left-1 -right-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <GripVertical className="w-4 h-4 text-gray-400" />
@@ -109,10 +119,10 @@ export const MultiFileCodeRenderer: React.FC<
       {/* Editor Area */}
       <div className="flex h-full flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-2">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 px-4 py-2">
           <div className="flex items-center gap-2">
             <button
-              className="p-1 hover:bg-gray-700 rounded transition-colors"
+              className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded transition-colors"
               onClick={() => setSidebarOpen((v) => !v)}
               aria-label={sidebarOpen ? 'Collapse file tree' : 'Expand file tree'}
             >
@@ -122,7 +132,7 @@ export const MultiFileCodeRenderer: React.FC<
                 }`}
               />
             </button>
-            <span className="text-sm font-medium text-gray-300 truncate">{activeFile}</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{activeFile}</span>
           </div>
 
           {tabBarExtraContent}
