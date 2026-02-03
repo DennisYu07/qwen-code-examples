@@ -16,6 +16,7 @@ This skill helps you automate the complete Pull Request process, including code 
 3. **PR Template Discovery** - Automatically scan for PR templates in the project
 4. **English Documentation Generation** - Generate English PR description, waiting for user confirmation
 5. **Automatic PR Submission** - Create PR using English description after user approval
+6. **Cleanup Process** - Offer to remove temporary PR description files after submission
 
 ## Usage
 
@@ -39,13 +40,12 @@ Please execute the following workflows in sequence:
 During the documentation generation phase, the process will pause to wait for user confirmation:
 
 ```
-Branch Preparation → Code Review → Generate English Documentation → [Wait for User Confirmation] → Submit PR
+Branch Preparation → Code Review → Generate English Documentation → [Wait for User Confirmation] → Submit PR → [Clean Up Temporary Files]
 ```
 
 **User Confirmation Points**:
 - After English documentation is generated, wait for user review and confirmation
-- Users can directly edit the document or suggest modifications
-- Only after confirmation will the PR be submitted
+- After PR is submitted, confirm deletion of temporary description files (PR_DESCRIPTION.md, etc.)
 
 ## Prerequisites
 
@@ -113,3 +113,4 @@ node ./scripts/create-pr.js \
 - Ensure all changes are committed before execution
 - PR descriptions will automatically search for templates in the project
 - Supports GitHub (requires gh CLI installation)
+- Temporary description files will be offered for deletion after PR submission

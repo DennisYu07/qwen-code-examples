@@ -65,6 +65,8 @@ After confirming everything is correct, let me know and I will proceed with PR s
 
 The English document will be used for PR description, proceeding to the next workflow [04-PR Submission](./04-pr-submission.md).
 
+**Note**: After PR submission is complete, temporary description files (PR_DESCRIPTION.md, PR_DESCRIPTION_*.md) will be offered for deletion to keep the repository clean.
+
 ## Checklist
 
 - [ ] PR template has been located and confirmed

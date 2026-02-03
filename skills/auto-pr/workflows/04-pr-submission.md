@@ -25,6 +25,13 @@ Push code and create Pull Request.
 - [ ] Add reviewers (optional)
 - [ ] Add labels (optional)
 
+## Clean Up Process ⭐⭐
+
+After PR submission, clean up temporary description files:
+- [ ] Check for generated PR description files (PR_DESCRIPTION.md, PR_DESCRIPTION_*.md)
+- [ ] Ask user for confirmation to delete these files
+- [ ] Delete upon user approval to keep repository clean
+
 ## Use Script to Create PR
 
 ### Script Location
@@ -39,7 +46,7 @@ Push code and create Pull Request.
 # Create using PR description file
 node ./scripts/create-pr.js \
   --title "feat: add new feature" \
-  --body-file ./PR_DESCRIPTION_EN.md \
+  --body-file ./PR_DESCRIPTION.md \
   --base main
 
 # Create draft PR
