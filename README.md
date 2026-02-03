@@ -48,6 +48,19 @@ Generates high-quality images from text descriptions using Alibaba Cloud's DashS
 - **Location**: `skills/image-generate/`
 - **Key Features**: Smart prompt optimization for hand-drawn styles and automated asset management.
 
+### 3. Auto PR Skill
+
+Automated Pull Request submission assistant, including code review, documentation generation, and PR creation.
+
+- **Location**: `skills/auto-pr/`
+- **Key Features**:
+  - Branch preparation and synchronization
+  - Code review analysis and difference checking
+  - Automatic PR template discovery
+  - English documentation generation with user confirmation
+  - Automated PR submission via GitHub CLI
+  - Pre-checks for dependencies and authentication
+
 ## Marketing Materials
 
 ### Qwen Code Brochures
