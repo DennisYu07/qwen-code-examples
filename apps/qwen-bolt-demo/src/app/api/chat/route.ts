@@ -292,12 +292,22 @@ You can reference, read, or modify these files as needed.
           let fsWait: NodeJS.Timeout | null = null;
           watcher = watch(workspaceDir, { recursive: true }, (eventType, filename) => {
              if (filename && !filename.startsWith('.') && !filename.includes('node_modules')) {
-               // Debounce updates to avoid sending too many events
-               if (fsWait) return;
+               // Debounce: reset timer on every event to wait for the final state
+               if (fsWait) clearTimeout(fsWait);
+               
                fsWait = setTimeout(async () => {
                  fsWait = null;
                  try {
                    const filePath = join(workspaceDir, filename);
+                   
+                   // Verify file exists before reading (handle deletions/renames gracefully)
+                   try {
+                     const stats = await import('fs/promises').then(fs => fs.stat(filePath));
+                     if (!stats.isFile()) return; // Ignore directories
+                   } catch (e) {
+                     return; // File vanished
+                   }
+
                    const content = await readFile(filePath, 'utf-8');
                    
                    const fileEvent = {
@@ -307,11 +317,11 @@ You can reference, read, or modify these files as needed.
                    };
                    const payload = `event: file\ndata: ${JSON.stringify(fileEvent)}\n\n`;
                    controller.enqueue(new TextEncoder().encode(payload));
-                   console.log('[API /api/chat] Watched file changed, pushed update:', filename);
+                   console.log('[API /api/chat] Watched file changed (debounced), pushed update:', filename);
                  } catch (e) {
-                   // Ignore read errors (file might be deleted temporarily)
+                   console.error('[API /api/chat] Error reading watched file:', filename, e);
                  }
-               }, 100);
+               }, 300); // Wait 300ms for writes to finish
              }
           });
           console.log('[API /api/chat] File watcher started for:', workspaceDir);
