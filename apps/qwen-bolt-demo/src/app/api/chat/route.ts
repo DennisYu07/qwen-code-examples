@@ -391,6 +391,10 @@ You can reference, read, or modify these files as needed.
             console.error('[API /api/chat] Error encoding error message:', encodeError);
           }
         } finally {
+          // 🔥 关键修复：延迟关闭流，给予文件监听器足够的时间 (debounce 300ms + IO) 来捕获最后的变更
+          console.log('[API /api/chat] Stream finished, waiting for pending file updates...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
           try {
             await q.close();
             console.log('[API /api/chat] Query closed successfully');
