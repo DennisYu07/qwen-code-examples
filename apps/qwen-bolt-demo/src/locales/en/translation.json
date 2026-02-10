@@ -69,5 +69,19 @@
   },
   "modelConfig": {
     "title": "Model Configuration"
+  },
+  "home": {
+    "poweredBy": "Powered by Qwen Code SDK",
+    "titlePrefix": "What will you ",
+    "build": "build",
+    "titleSuffix": " today?",
+    "subtitle": "Create stunning apps & websites by chatting with AI.",
+    "placeholder": "Describe what you want to build...",
+    "buildButton": "Build now →",
+    "template": {
+      "react": "⚛️ Simple React App",
+      "html": "🎨 Basic HTML Page",
+      "counter": "🧮 Counter App"
+    }
   }
 }

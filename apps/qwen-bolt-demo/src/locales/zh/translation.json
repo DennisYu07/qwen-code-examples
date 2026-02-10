@@ -69,5 +69,19 @@
   },
   "modelConfig": {
     "title": "模型配置"
+  },
+  "home": {
+    "poweredBy": "由 Qwen Code SDK 驱动",
+    "titlePrefix": "今天你想 ",
+    "build": "构建",
+    "titleSuffix": " 什么？",
+    "subtitle": "通过与 AI 对话创建令人惊叹的应用程序和网站。",
+    "placeholder": "描述你想构建什么...",
+    "buildButton": "立即构建 →",
+    "template": {
+      "react": "⚛️ 简单 React 应用",
+      "html": "🎨 基础 HTML 页面",
+      "counter": "🧮 计数器应用"
+    }
   }
 }

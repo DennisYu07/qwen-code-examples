@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { Code2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ModelSelector } from '@/components/ModelSelector';
+import { ModelConfigSettings } from '@/components/ModelConfigSettings';
 
 export default function Home() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const router = useRouter();
 
@@ -58,6 +61,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3">
               <ModelSelector />
+              <ModelConfigSettings />
               <LanguageSwitcher />
               <ThemeToggle />
             </div>
@@ -71,21 +75,21 @@ export default function Home() {
           {/* Version badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-full text-sm text-gray-600 dark:text-gray-300">
             <Code2 className="w-4 h-4" />
-            <span>Powered by Qwen Code SDK</span>
+            <span>{t('home.poweredBy')}</span>
           </div>
 
           {/* Main title */}
           <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-white leading-tight tracking-tight">
-            What will you{' '}
+            {t('home.titlePrefix')}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500">
-              build
+              {t('home.build')}
             </span>{' '}
-            today?
+            {t('home.titleSuffix')}
           </h1>
 
           {/* Subtitle */}
           <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Create stunning apps & websites by chatting with AI.
+            {t('home.subtitle')}
           </p>
 
           {/* Input area */}
@@ -97,7 +101,7 @@ export default function Home() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Describe what you want to build..."
+                  placeholder={t('home.placeholder')}
                   className="w-full px-8 py-8 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-none focus:outline-none text-base"
                   rows={2}
                 />
@@ -110,7 +114,7 @@ export default function Home() {
                     disabled={!input.trim()}
                     className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25"
                   >
-                    Build now →
+                    {t('home.buildButton')}
                   </button>
                 </div>
               </div>
@@ -126,7 +130,7 @@ export default function Home() {
               }}
               className="px-4 py-2 text-sm bg-gray-100/50 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-full transition-all text-gray-600 dark:text-gray-300 backdrop-blur-sm"
             >
-              ⚛️ Simple React App
+              {t('home.template.react')}
             </button>
             <button 
                onClick={() => {
@@ -135,7 +139,7 @@ export default function Home() {
               }}
               className="px-4 py-2 text-sm bg-gray-100/50 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-full transition-all text-gray-600 dark:text-gray-300 backdrop-blur-sm"
             >
-              🎨 Basic HTML Page
+              {t('home.template.html')}
             </button>
              <button 
                onClick={() => {
@@ -144,7 +148,7 @@ export default function Home() {
               }}
               className="px-4 py-2 text-sm bg-gray-100/50 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 rounded-full transition-all text-gray-600 dark:text-gray-300 backdrop-blur-sm"
             >
-              🧮 Counter App
+              {t('home.template.counter')}
             </button>
           </div>
 

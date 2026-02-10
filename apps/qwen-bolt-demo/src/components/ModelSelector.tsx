@@ -61,25 +61,25 @@ export function ModelSelector() {
       <Tooltip content={t('projectSettings.modelSelect')} side="bottom">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 border border-gray-200 dark:border-white/10 transition-colors text-sm text-gray-600 dark:text-gray-300"
         >
-          <Cpu className="w-4 h-4 text-gray-400" />
-          <span className="text-gray-300">{displayName}</span>
-          <ChevronDown className="w-3 h-3 text-gray-400" />
+          <Cpu className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <span>{displayName}</span>
+          <ChevronDown className="w-3 h-3 text-gray-500 dark:text-gray-400" />
         </button>
       </Tooltip>
 
       {isOpen && (
-        <div className="absolute left-0 mt-2 w-80 bg-gray-900 dark:bg-gray-900 border border-gray-700 dark:border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden">
           <div className="p-3">
-            <div className="text-xs text-gray-400 px-2 py-1 font-medium mb-2">Qwen Models</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 font-medium mb-2">Qwen Models</div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => handleModelSelect('qwen-coder-plus')}
                 className={`text-left px-3 py-2 rounded text-sm transition-colors ${
                   currentModel.includes('qwen-coder-plus')
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                    ? 'bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                 }`}
               >
                 <div className="font-medium text-xs">Qwen Coder+</div>
@@ -89,8 +89,8 @@ export function ModelSelector() {
                 onClick={() => handleModelSelect('qwen-coder-turbo')}
                 className={`text-left px-3 py-2 rounded text-sm transition-colors ${
                   currentModel.includes('qwen-coder-turbo')
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                    ? 'bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                 }`}
               >
                 <div className="font-medium text-xs">Qwen Coder Turbo</div>
@@ -100,8 +100,8 @@ export function ModelSelector() {
                 onClick={() => handleModelSelect('qwen-plus')}
                 className={`text-left px-3 py-2 rounded text-sm transition-colors ${
                   currentModel.includes('qwen-plus')
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                    ? 'bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                 }`}
               >
                 <div className="font-medium text-xs">Qwen Plus</div>
@@ -111,8 +111,8 @@ export function ModelSelector() {
                 onClick={() => handleModelSelect('qwen-turbo')}
                 className={`text-left px-3 py-2 rounded text-sm transition-colors ${
                   currentModel.includes('qwen-turbo')
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                    ? 'bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                 }`}
               >
                 <div className="font-medium text-xs">Qwen Turbo</div>
@@ -122,8 +122,8 @@ export function ModelSelector() {
                 onClick={() => handleModelSelect('qwen-max')}
                 className={`text-left px-3 py-2 rounded text-sm transition-colors ${
                   currentModel.includes('qwen-max')
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                    ? 'bg-blue-50/50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                 }`}
               >
                 <div className="font-medium text-xs">Qwen3 Max</div>
@@ -132,8 +132,8 @@ export function ModelSelector() {
             </div>
           </div>
 
-          <div className="border-t border-gray-700 px-3 py-2">
-            <div className="text-xs text-gray-500">
+          <div className="border-t border-gray-200 dark:border-gray-700 px-3 py-2 bg-gray-50 dark:bg-gray-800/50">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               {settings.modelConfig.authType === 'qwen-oauth' ? (
                 <span>✓ Using Qwen OAuth (Free)</span>
               ) : (
