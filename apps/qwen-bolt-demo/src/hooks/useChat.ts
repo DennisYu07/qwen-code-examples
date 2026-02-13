@@ -6,10 +6,10 @@ import { useProject } from '@/contexts/ProjectContext';
 import { saveChatSession, getChatSession } from '@/lib/chat-persistence';
 
 interface UseChatProps {
-  settings: ProjectSettings; // Kept for API compatibility, but we'll prefer Context directly
+  settings: ProjectSettings;
   sessionId: string;
   setSessionId: (id: string) => void;
-  loadAllFiles: (id: string) => Promise<void>;
+  loadAllFiles: (sessionId?: string) => Promise<void>;
   onFileUpdate?: (path: string, content: string) => void;
   files: Record<string, string>;
   onFilesLoaded?: (files: Record<string, string>) => void;
@@ -194,13 +194,12 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
                 try {
                   const parsed = JSON.parse(jsonStr);
 
-                   // Handle file updates (New Stream-to-Browser Architecture)
-                  if (currentEvent === 'file' && parsed.type === 'file_update') {
+                   // Handle file write events from backend MCP Server
+                  if (currentEvent === 'file' && (parsed.type === 'file_write' || parsed.type === 'file_update')) {
                      if (onFileUpdate) {
                        onFileUpdate(parsed.path, parsed.content);
                      }
-                     // Skip normal message processing for file events
-                     currentEvent = 'message'; // Reset
+                     currentEvent = 'message';
                      continue;
                   }
 
@@ -219,13 +218,6 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
                     setMessages(prev => [...prev, authMsg]);
                   }
 
-                  if (parsed.type === 'file_updated') {
-                    // Legacy polling trigger - can be removed eventually
-                    if (currentSessionId && !onFileUpdate) {
-                      loadAllFiles(currentSessionId);
-                    }
-                  }
-
                   if (parsed.type === 'result') {
                     hasReceivedResult = true;
 
@@ -237,14 +229,11 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
                       }
                     }
 
-                    // Optimization: even though we have streaming updates (onFileUpdate), do a full fetch at end of turn as a fallback
-                    // This ensures any missed file watch events (fs.watch can be unreliable) are corrected for eventual consistency
-                    if (currentSessionId) {
-                      setTimeout(() => {
-                        console.log('[useChat] Turn complete, performing final consistency check (loadAllFiles)');
-                        loadAllFiles(currentSessionId);
-                      }, 500); // Slight delay to ensure filesystem I/O completes
-                    }
+                    // Sync files from WebContainer FS after turn completes
+                    setTimeout(() => {
+                      console.log('[useChat] Turn complete, syncing files from WebContainer FS');
+                      loadAllFiles();
+                    }, 500);
                     break;
                   }
 

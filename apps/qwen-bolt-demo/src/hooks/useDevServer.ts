@@ -1,7 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { DevServer } from '@/components/workspace';
 import { useWebContainer } from './useWebContainer';
-import { convertFilesToTree, findProjectRoot } from '@/lib/file-utils';
+import { findProjectRoot } from '@/lib/file-utils';
+
+// .npmrc content for faster npm install using China mirror
+const NPMRC_CONTENT = `registry=https://registry.npmmirror.com
+fetch-retries=3
+fetch-retry-mintimeout=5000
+fetch-retry-maxtimeout=30000
+`;
 
 export function useDevServer(sessionId: string, files: Record<string, string>) {
   const [previewUrl, setPreviewUrl] = useState<string>('');
@@ -11,39 +18,34 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
   const [devServerLogs, setDevServerLogs] = useState<string[]>([]);
   
   const { webcontainer, isLoading: isWebContainerLoading, error: webContainerError } = useWebContainer();
-  const isFileSystemMountedRef = useRef(false);
+  const npmrcWrittenRef = useRef(false);
 
-  // 1. Mount/Sync Files
+  // Write .npmrc to WebContainer for faster npm install
   useEffect(() => {
-    async function initFileSystem() {
-      if (!webcontainer || Object.keys(files).length === 0) {
-          return;
-      }
+    async function writeNpmrc() {
+      if (!webcontainer || npmrcWrittenRef.current) return;
       
-      // Full mount only once
-      if (!isFileSystemMountedRef.current) {
-        try {
-          console.log('[DevServer] Initial mount.', Object.keys(files).length);
-          const tree = convertFilesToTree(files);
-          await webcontainer.mount(tree);
-          isFileSystemMountedRef.current = true;
-          setDevServerLogs(prev => [...prev, '[System] File system mounted.']);
-        } catch (error) {
-          console.error('[WebContainer] Failed to mount files:', error);
-        }
+      try {
+        await webcontainer.fs.writeFile('.npmrc', NPMRC_CONTENT);
+        npmrcWrittenRef.current = true;
+        console.log('[DevServer] .npmrc written to WebContainer for faster installs');
+        setDevServerLogs(prev => [...prev, '[System] npm mirror configured for faster installs.']);
+      } catch (error) {
+        console.warn('[DevServer] Failed to write .npmrc:', error);
       }
     }
     
-    initFileSystem();
-  }, [webcontainer, files]);
+    writeNpmrc();
+  }, [webcontainer]);
 
+  // Reset npmrc flag when WebContainer changes
   useEffect(() => {
     if (!webcontainer) {
-        isFileSystemMountedRef.current = false;
+      npmrcWrittenRef.current = false;
     }
   }, [webcontainer]);
 
-  // 2. Server Ready Listener
+  // Listen for server-ready events from WebContainer
   useEffect(() => {
     if (!webcontainer) return;
 
@@ -74,11 +76,11 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
       const rootPath = projectRoot === '.' ? '' : projectRoot;
       const cdCommand = rootPath ? `cd ${rootPath} && ` : '';
 
-      // Find package.json to determine script
-      const packageJsonPath = Object.keys(files).find(f => 
-        f === (projectRoot === '.' ? 'package.json' : `${projectRoot}/package.json`) || 
-        f.endsWith(`/${projectRoot}/package.json`)
-      );
+      // Find package.json to determine dev script
+      const packageJsonPath = Object.keys(files).find(f => {
+        const cleanPath = f.startsWith('/') ? f.substring(1) : f;
+        return cleanPath === (projectRoot === '.' ? 'package.json' : `${projectRoot}/package.json`);
+      });
 
       if (packageJsonPath) {
           const content = files[packageJsonPath];
@@ -88,18 +90,12 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
               if (!pkg.scripts?.dev && pkg.scripts?.start) {
                   devScript = 'npm start';
               }
-          } catch (e) {}
+          } catch (parseError) {
+              console.warn('[DevServer] Failed to parse package.json:', parseError);
+          }
 
-          // Write .env.local to force host binding for frameworks that respect it
-          // OR modify the command to set HOST=0.0.0.0
-          // Many tools (Vite, Next.js) respect HOST env var.
-          
-          // Send command to terminal
-          // We force host binding to 0.0.0.0 via environment variable
+          // Dispatch install + dev command to the terminal shell
           setTimeout(() => {
-            // Check if we need to install dependencies first time
-            // For now we always do 'npm install' which is safe but maybe slow if already installed.
-            // But since this is 'auto-start' on new generation, install makes sense.
             const command = `export HOST=0.0.0.0 && ${cdCommand}npm install && ${devScript} -- --host 0.0.0.0`;
             console.log('[DevServer] Dispatching command:', command);
             window.dispatchEvent(new CustomEvent('bolt:run-command', { 
@@ -121,16 +117,12 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
   }, [webcontainer, isStartingServer, files]);
 
   const stopDevServer = useCallback(() => {
-    // In jsh, we can't easily kill the foreground process from here without knowing its PID.
-    // However, we can kill all node processes.
     if (webcontainer) {
         webcontainer.spawn('killall', ['node']);
         setDevServerLogs(prev => [...prev, '[System] Server process terminated.']);
         setPreviewUrl('');
         setDevServer(null);
         setIsStartingServer(false);
-        // Dispatch Ctrl+C typically requires writing \x03 to stdin, but we don't have the stream here.
-        // killing node is sufficient for the server effect.
     }
   }, [webcontainer]);
 
