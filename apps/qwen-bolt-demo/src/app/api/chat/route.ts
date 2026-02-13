@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { query, type SDKUserMessage, type SDKMessage, type SDKSystemMessage, createSdkMcpServer, tool, SdkLogger } from '@qwen-code/sdk';
 import { z } from 'zod';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Global listeners for SDK logs
 const logListeners = new Set<(msg: string) => void>();
@@ -40,6 +43,94 @@ import { getSystemInstructions, buildUserMessage } from '@/lib/prompt-builder';
 
 export const runtime = 'nodejs';
 
+// Create a temporary workspace directory for the session
+function createSessionWorkspace(sessionId: string): string {
+  const workspaceDir = path.join(os.tmpdir(), 'qwen-bolt', sessionId);
+  fs.mkdirSync(workspaceDir, { recursive: true });
+  console.log('[Chat API] Created workspace:', workspaceDir);
+  return workspaceDir;
+}
+
+// Recursively read all files from a directory (for pushing to frontend)
+function readDirectoryRecursive(dirPath: string, basePath: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      const relativePath = path.relative(basePath, fullPath);
+      
+      // Skip node_modules, .git, etc.
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.cache') continue;
+      
+      if (entry.isDirectory()) {
+        Object.assign(result, readDirectoryRecursive(fullPath, basePath));
+      } else if (entry.isFile()) {
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          result[relativePath] = content;
+        } catch {
+          // Skip binary or unreadable files
+        }
+      }
+    }
+  } catch {
+    // Directory might not exist yet
+  }
+  
+  return result;
+}
+
+// Watch a directory for file changes and push them via SSE
+function watchWorkspace(
+  workspaceDir: string,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder
+): fs.FSWatcher | null {
+  try {
+    const watcher = fs.watch(workspaceDir, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+      
+      // Skip node_modules, .git, etc.
+      if (filename.includes('node_modules') || filename.includes('.git') || filename.includes('.cache')) return;
+      
+      const fullPath = path.join(workspaceDir, filename);
+      
+      try {
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const fileEvent = {
+            type: 'file_write',
+            path: filename,
+            content: content
+          };
+          const payload = `event: file\ndata: ${JSON.stringify(fileEvent)}\n\n`;
+          controller.enqueue(encoder.encode(payload));
+        }
+      } catch {
+        // File might be binary or deleted between check and read
+      }
+    });
+    
+    console.log('[Chat API] File watcher started for:', workspaceDir);
+    return watcher;
+  } catch (error) {
+    console.warn('[Chat API] Failed to start file watcher:', error);
+    return null;
+  }
+}
+
+// Clean up workspace directory
+function cleanupWorkspace(workspaceDir: string) {
+  try {
+    fs.rmSync(workspaceDir, { recursive: true, force: true });
+    console.log('[Chat API] Cleaned up workspace:', workspaceDir);
+  } catch (error) {
+    console.warn('[Chat API] Failed to cleanup workspace:', error);
+  }
+}
+
 // Persistent generator for SDK prompt stream
 async function* createPromptStream(
   sessionId: string,
@@ -72,8 +163,8 @@ function getFileStore(sessionId: string): Map<string, string> {
   return sessionFileStore.get(sessionId)!;
 }
 
-// MCP Server: file operations are forwarded to frontend via SSE events (no disk writes)
-function createFileSystemServer(sessionId: string, streamController?: ReadableStreamDefaultController) {
+// MCP Server: file operations write to disk AND push to frontend via SSE
+function createFileSystemServer(sessionId: string, workspaceDir: string, streamController?: ReadableStreamDefaultController) {
   const fileStore = getFileStore(sessionId);
 
   return createSdkMcpServer({
@@ -87,11 +178,16 @@ function createFileSystemServer(sessionId: string, streamController?: ReadableSt
           path: z.string().describe('The relative path of the file to write'),
           content: z.string().describe('The content to write to the file'),
         },
-        async ({ path, content }) => {
+        async ({ path: filePath, content }) => {
           try {
-             let targetPath = path;
+             let targetPath = filePath;
              if (targetPath.startsWith('/')) targetPath = targetPath.substring(1);
              if (targetPath.includes('../')) throw new Error('Cannot write outside workspace');
+             
+             // Write to disk so SDK built-in tools can read it
+             const fullPath = path.join(workspaceDir, targetPath);
+             fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+             fs.writeFileSync(fullPath, content, 'utf-8');
              
              // Store in memory for subsequent replace operations
              fileStore.set(targetPath, content);
@@ -99,6 +195,7 @@ function createFileSystemServer(sessionId: string, streamController?: ReadableSt
              console.log(`[local-fs] write_file: ${targetPath}`);
 
              // Push file_write event to frontend via SSE
+             // (fs.watch will also fire, but explicit push ensures immediate delivery)
              if (streamController) {
                 const fileEvent = {
                    type: 'file_write',
@@ -129,27 +226,39 @@ function createFileSystemServer(sessionId: string, streamController?: ReadableSt
            oldString: z.string().describe('The exact string to replace'),
            newString: z.string().describe('The new string to replace with'),
         },
-        async ({ path, oldString, newString }) => {
+        async ({ path: filePath, oldString, newString }) => {
           try {
-             let targetPath = path;
+             let targetPath = filePath;
              if (targetPath.startsWith('/')) targetPath = targetPath.substring(1);
              
-             const currentContent = fileStore.get(targetPath);
+             // Try reading from memory first, fallback to disk
+             let currentContent = fileStore.get(targetPath);
              if (currentContent === undefined) {
-                return {
-                   isError: true,
-                   content: [{ type: 'text', text: `Error: file ${path} not found in session store. Write it first or use write_file.` }]
-                };
+                const fullPath = path.join(workspaceDir, targetPath);
+                if (fs.existsSync(fullPath)) {
+                   currentContent = fs.readFileSync(fullPath, 'utf-8');
+                   fileStore.set(targetPath, currentContent);
+                } else {
+                   return {
+                      isError: true,
+                      content: [{ type: 'text', text: `Error: file ${filePath} not found. Write it first or use write_file.` }]
+                   };
+                }
              }
              if (!currentContent.includes(oldString)) {
                 return {
                    isError: true,
-                   content: [{ type: 'text', text: `Error: oldString not found in ${path}` }]
+                   content: [{ type: 'text', text: `Error: oldString not found in ${filePath}` }]
                 };
              }
              
              const newContent = currentContent.replace(oldString, newString);
              fileStore.set(targetPath, newContent);
+             
+             // Write updated content to disk
+             const fullPath = path.join(workspaceDir, targetPath);
+             fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+             fs.writeFileSync(fullPath, newContent, 'utf-8');
              
              // Push full file content to frontend via SSE
              if (streamController) {
@@ -163,7 +272,7 @@ function createFileSystemServer(sessionId: string, streamController?: ReadableSt
              }
              
              return {
-               content: [{ type: 'text', text: `Successfully replaced string in ${path}` }]
+               content: [{ type: 'text', text: `Successfully replaced string in ${filePath}` }]
              };
           } catch (e: any) {
              return {
@@ -217,8 +326,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build uploaded files context (stored in memory, no disk writes)
+    // Create workspace directory for SDK built-in tools
+    const workspaceDir = createSessionWorkspace(sessionId);
+
+    // Write uploaded files to disk so SDK can reference them
     const filesContext = buildUploadedFilesContext(uploadedFiles, sessionId);
+    if (uploadedFiles && Array.isArray(uploadedFiles)) {
+      for (const file of uploadedFiles) {
+        const cleanPath = file.path.startsWith('/') ? file.path.substring(1) : file.path;
+        const fullPath = path.join(workspaceDir, cleanPath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, file.content, 'utf-8');
+      }
+    }
 
     const encoder = new TextEncoder();
     
@@ -236,6 +356,7 @@ export async function POST(request: NextRequest) {
       debug: true,
       logLevel: 'debug',
       authType: sdkAuthType,
+      cwd: workspaceDir,
     };
 
     if (modelConfig?.model) {
@@ -260,11 +381,15 @@ export async function POST(request: NextRequest) {
 
     let queryInstance: any = null;
     let streamController: ReadableStreamDefaultController | null = null;
+    let fileWatcher: fs.FSWatcher | null = null;
 
     const stream = new ReadableStream({
       async start(controller) {
         streamController = controller;
-        const fileSystemServer = createFileSystemServer(sessionId, streamController);
+        const fileSystemServer = createFileSystemServer(sessionId, workspaceDir, streamController);
+
+        // Start watching workspace for file changes from SDK built-in tools
+        fileWatcher = watchWorkspace(workspaceDir, controller, encoder);
 
         // Listen for Auth URLs from SDK logs
         const logListener = (msg: string) => {
@@ -326,17 +451,40 @@ export async function POST(request: NextRequest) {
           }
         } finally {
           logListeners.delete(logListener);
+
+          // Close file watcher
+          if (fileWatcher) {
+            try { fileWatcher.close(); } catch {}
+          }
+
+          // Push all final files from workspace to frontend before closing
+          try {
+            const allFiles = readDirectoryRecursive(workspaceDir, workspaceDir);
+            for (const [filePath, content] of Object.entries(allFiles)) {
+              const fileEvent = { type: 'file_write', path: filePath, content };
+              const payload = `event: file\ndata: ${JSON.stringify(fileEvent)}\n\n`;
+              controller.enqueue(encoder.encode(payload));
+            }
+          } catch {
+            // Workspace might already be cleaned up
+          }
+
           await new Promise(resolve => setTimeout(resolve, 500));
 
-          // Clean up session file store
+          // Clean up session file store and workspace
           sessionFileStore.delete(sessionId);
+          cleanupWorkspace(workspaceDir);
 
           try { await queryInstance?.close(); } catch {}
           try { controller.close(); } catch {}
         }
       },
       cancel() {
+        if (fileWatcher) {
+          try { fileWatcher.close(); } catch {}
+        }
         sessionFileStore.delete(sessionId);
+        cleanupWorkspace(workspaceDir);
         void queryInstance?.close();
       },
     });

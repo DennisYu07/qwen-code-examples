@@ -18,35 +18,38 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
   const [devServerLogs, setDevServerLogs] = useState<string[]>([]);
   
   const { webcontainer, isLoading: isWebContainerLoading, error: webContainerError } = useWebContainer();
-  const isFileSystemMountedRef = useRef(false);
   const npmrcWrittenRef = useRef(false);
+  const lastMountedFilesCountRef = useRef(0);
 
   // Mount/sync files to WebContainer FS when files change
+  // webcontainer.mount() is additive/merge, so calling it multiple times is safe
   useEffect(() => {
     async function mountFiles() {
-      if (!webcontainer || Object.keys(files).length === 0) return;
+      const fileCount = Object.keys(files).length;
+      if (!webcontainer || fileCount === 0) return;
 
-      if (!isFileSystemMountedRef.current) {
-        try {
-          console.log('[DevServer] Mounting files to WebContainer FS:', Object.keys(files).length);
-          const tree = convertFilesToTree(files);
-          await webcontainer.mount(tree);
-          isFileSystemMountedRef.current = true;
-          setDevServerLogs(prev => [...prev, '[System] File system mounted.']);
-        } catch (error) {
-          console.error('[DevServer] Failed to mount files:', error);
-        }
+      // Only re-mount when file count actually changed (new files arrived)
+      if (fileCount === lastMountedFilesCountRef.current) return;
+
+      try {
+        console.log('[DevServer] Mounting files to WebContainer FS:', fileCount, '(was:', lastMountedFilesCountRef.current, ')');
+        const tree = convertFilesToTree(files);
+        await webcontainer.mount(tree);
+        lastMountedFilesCountRef.current = fileCount;
+        setDevServerLogs(prev => [...prev, `[System] File system synced (${fileCount} files).`]);
+      } catch (error) {
+        console.error('[DevServer] Failed to mount files:', error);
       }
     }
 
     mountFiles();
   }, [webcontainer, files]);
 
-  // Reset mount flag when WebContainer changes
+  // Reset state when WebContainer changes
   useEffect(() => {
     if (!webcontainer) {
-      isFileSystemMountedRef.current = false;
       npmrcWrittenRef.current = false;
+      lastMountedFilesCountRef.current = 0;
     }
   }, [webcontainer]);
 
@@ -99,6 +102,19 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
     setIsStartingServer(true);
     setServerError('');
     setDevServerLogs(prev => [...prev, '[System] Initiating development environment...']);
+
+    // Ensure all current files are mounted before starting
+    try {
+      const fileCount = Object.keys(files).length;
+      if (fileCount > 0) {
+        console.log('[DevServer] Pre-start mount: syncing', fileCount, 'files to WebContainer FS');
+        const tree = convertFilesToTree(files);
+        await webcontainer.mount(tree);
+        lastMountedFilesCountRef.current = fileCount;
+      }
+    } catch (mountError) {
+      console.error('[DevServer] Pre-start mount failed:', mountError);
+    }
 
     try {
       const projectRoot = findProjectRoot(files);
