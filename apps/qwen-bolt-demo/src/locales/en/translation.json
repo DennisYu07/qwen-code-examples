@@ -29,11 +29,16 @@
   },
   "terminal": {
     "close": "Close Terminal",
-    "add": "Add Terminal",
+    "add": "New Terminal",
     "startChat": "Start a chat to enable terminal",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
-    "ready": "Ready to start development server..."
+    "ready": "Ready to start development server...",
+    "terminal": "Terminal",
+    "output": "Output",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "noOutput": "No output logs yet..."
   },
   "code": {
     "collapse": "Collapse file tree",

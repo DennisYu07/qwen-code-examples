@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Terminal from './Terminal';
 import { ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useTranslation } from 'react-i18next';
 
 interface TerminalTab {
   id: string;
@@ -25,7 +26,8 @@ export function TerminalPanel({
   isOpen = true, 
   onToggle,
 }: TerminalPanelProps) {
-  const { theme, resolvedTheme } = useTheme();
+  const { t } = useTranslation();
+  const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -106,7 +108,11 @@ export function TerminalPanel({
               onClick={() => setActiveTabId(tab.id)}
             >
               <span className="whitespace-nowrap select-none">
-                {tab.type === 'output' ? `${tab.label} (${outputLogCount})` : tab.label}
+                {tab.id === 'terminal-0'
+                  ? t('terminal.terminal')
+                  : tab.id === 'output'
+                    ? `${t('terminal.output')} (${outputLogCount})`
+                    : tab.label}
               </span>
               {/* Show close button for non-default tabs */}
               {tab.id !== 'terminal-0' && tab.id !== 'output' && (
@@ -131,7 +137,7 @@ export function TerminalPanel({
             className={`flex items-center justify-center h-full px-2 transition-colors ${
               isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
             }`}
-            title="New Terminal"
+            title={t('terminal.add')}
           >
             <Plus size={14} />
           </button>
@@ -143,7 +149,7 @@ export function TerminalPanel({
             className={`ml-2 transition-colors flex-shrink-0 ${
               isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
             }`}
-            title={isOpen ? "Minimize" : "Maximize"}
+            title={isOpen ? t('terminal.minimize') : t('terminal.maximize')}
           >
             {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
           </button>
@@ -190,7 +196,7 @@ export function TerminalPanel({
         >
           {devServerLogs.length === 0 ? (
             <div className={`italic ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              No output logs yet...
+              {t('terminal.noOutput')}
             </div>
           ) : (
             devServerLogs.map((log, i) => (

@@ -33,7 +33,12 @@
     "startChat": "开始对话以启用终端",
     "hide": "隐藏终端",
     "show": "显示终端",
-    "ready": "准备启动开发服务器..."
+    "ready": "准备启动开发服务器...",
+    "terminal": "终端",
+    "output": "输出",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "noOutput": "暂无输出日志..."
   },
   "code": {
     "collapse": "折叠文件树",
