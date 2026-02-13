@@ -83,7 +83,7 @@ function WorkspaceContent() {
     refreshPreview,
     isWebContainerLoading,
     webContainerError
-  } = useDevServer(sessionId, files);
+  } = useDevServer(sessionId, files, isLoading);
 
   // Add local previewUrl state to allow updating previewUrl
   const [previewUrl, setPreviewUrl] = useState(initialPreviewUrl);
@@ -132,7 +132,8 @@ function WorkspaceContent() {
     // Only send if settings are loaded to ensure we have the correct model config auth keys
     if (initialPrompt && messages.length === 0 && !hasInitializedRef.current && isLoaded) {
        // If we have uploaded files from the home page, restore them first
-      if (settings.uploadedFiles.length > 0) {
+      if (settings.uploadedFiles.length > 0 && !hasRestoredFilesRef.current) {
+        hasRestoredFilesRef.current = true;
         const filesToAttach: AttachedFile[] = settings.uploadedFiles.map(f => ({
           id: f.id,
           name: f.name,
@@ -144,9 +145,21 @@ function WorkspaceContent() {
         }));
         
         console.log('[Workspace] Restoring attached files from Home:', filesToAttach);
-        setAttachedFiles(filesToAttach);
+
+        // Write files to the code panel so they are visible immediately
+        filesToAttach.forEach(file => {
+          if (file.content) {
+            updateFile(file.path, file.content);
+          }
+        });
+
         clearAllFiles();
-        return; // Wait for state update before sending
+
+        // Send message with restored files directly to avoid state timing issues
+        hasInitializedRef.current = true;
+        console.log('[Workspace] Sending initial prompt with restored files:', settings.modelConfig);
+        sendMessage(initialPrompt, filesToAttach);
+        return;
       }
 
       hasInitializedRef.current = true;

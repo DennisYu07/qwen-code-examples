@@ -20,7 +20,7 @@ export function useFiles(initialSessionId: string = '') {
               const parts = cleanPath.split('/');
               if (parts.length > 1) {
                   const dir = parts.slice(0, -1).join('/');
-                  await webcontainer.spawn('mkdir', ['-p', dir]);
+                  await webcontainer.fs.mkdir(dir, { recursive: true });
               }
               await webcontainer.fs.writeFile(cleanPath, content);
               console.log('[useFiles] Wrote file to WebContainer:', cleanPath);

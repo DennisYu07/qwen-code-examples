@@ -100,7 +100,7 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
     console.log('[useChat] Settings updated in ref (from Context):', settings.modelConfig);
   }, [settings]);
 
-  const sendMessage = useCallback(async (messageText?: string) => {
+  const sendMessage = useCallback(async (messageText?: string, extraFiles?: AttachedFile[]) => {
     const textToSend = messageText || input.trim();
     if (!textToSend || isLoading) return;
 
@@ -110,9 +110,8 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
     // Double check directly from context if possible (though ref should be synced)
     console.log('[useChat] sendMessage called. Current ref config:', currentSettings.modelConfig);
 
-
-    const currentAttachedFiles = [...attachedFiles];
-
+    // Merge extra files (e.g. from home page restore) with current attached files
+    const currentAttachedFiles = extraFiles ? [...attachedFiles, ...extraFiles] : [...attachedFiles];
     const userMessage: Message = {
       id: `user_${Date.now()}`,
       role: 'user',

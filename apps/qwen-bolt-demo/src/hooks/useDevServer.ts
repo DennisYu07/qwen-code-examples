@@ -10,7 +10,7 @@ fetch-retry-mintimeout=5000
 fetch-retry-maxtimeout=30000
 `;
 
-export function useDevServer(sessionId: string, files: Record<string, string>) {
+export function useDevServer(sessionId: string, files: Record<string, string>, isChatLoading: boolean = false) {
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [devServer, setDevServer] = useState<DevServer | null>(null);
   const [isStartingServer, setIsStartingServer] = useState(false);
@@ -184,13 +184,14 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
     }
   }, [webcontainer, isStartingServer, files]);
 
-  // Auto-start: when WebContainer is ready AND files with package.json are available
-  // This covers both new generation (files arrive after AI finishes) and history restore
+  // Auto-start: when WebContainer is ready AND files with package.json are available AND chat is not loading
+  // Wait for AI to finish generating before starting npm install to avoid resource contention
   useEffect(() => {
     if (hasAutoStartedRef.current) return;
     if (!webcontainer || isWebContainerLoading) return;
     if (Object.keys(files).length === 0) return;
     if (isStartingServer) return;
+    if (isChatLoading) return;
 
     // Find package.json to confirm this is a runnable project
     const hasPackageJson = Object.keys(files).some(f => {
@@ -200,10 +201,10 @@ export function useDevServer(sessionId: string, files: Record<string, string>) {
 
     if (!hasPackageJson) return;
 
-    console.log('[DevServer] Auto-start: WebContainer ready + files available, starting dev server...');
+    console.log('[DevServer] Auto-start: WebContainer ready + files available + chat idle, starting dev server...');
     hasAutoStartedRef.current = true;
     startDevServer();
-  }, [webcontainer, isWebContainerLoading, files, isStartingServer, startDevServer]);
+  }, [webcontainer, isWebContainerLoading, files, isStartingServer, startDevServer, isChatLoading]);
 
   const stopDevServer = useCallback(() => {
     if (webcontainer) {
