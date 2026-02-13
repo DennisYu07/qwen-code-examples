@@ -1,64 +1,130 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Terminal from './Terminal';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
+import { useTheme } from 'next-themes';
+
+interface TerminalTab {
+  id: string;
+  label: string;
+  type: 'terminal' | 'output';
+}
 
 interface TerminalPanelProps {
   devServerLogs?: string[];
   sessionId?: string;
   isOpen?: boolean;
   onToggle?: () => void;
-  onServerDetected?: (port: number) => void;
 }
+
+let terminalIdCounter = 1;
 
 export function TerminalPanel({ 
   devServerLogs = [], 
   isOpen = true, 
   onToggle,
-  onServerDetected
 }: TerminalPanelProps) {
-  const [activeTab, setActiveTab] = useState<'terminal' | 'output'>('terminal');
+  const { theme } = useTheme();
+  const isDark = theme !== 'light';
+
+  const [tabs, setTabs] = useState<TerminalTab[]>([
+    { id: 'terminal-0', label: 'Terminal', type: 'terminal' },
+    { id: 'output', label: 'Output', type: 'output' },
+  ]);
+  const [activeTabId, setActiveTabId] = useState('terminal-0');
   const outputRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll output
   useEffect(() => {
-    if (activeTab === 'output' && outputRef.current) {
+    if (activeTabId === 'output' && outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [devServerLogs, activeTab]);
+  }, [devServerLogs, activeTabId]);
+
+  const addTerminalTab = useCallback(() => {
+    const newId = `terminal-${terminalIdCounter++}`;
+    const newTab: TerminalTab = {
+      id: newId,
+      label: `Terminal ${terminalIdCounter}`,
+      type: 'terminal',
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTabId(newId);
+  }, []);
+
+  const closeTab = useCallback((tabId: string) => {
+    setTabs(prev => {
+      const filtered = prev.filter(t => t.id !== tabId);
+      // If closing the active tab, switch to the first remaining tab
+      if (tabId === activeTabId && filtered.length > 0) {
+        setActiveTabId(filtered[0].id);
+      }
+      return filtered;
+    });
+  }, [activeTabId]);
+
+  const outputLogCount = devServerLogs.length;
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#1a1b26]">
+    <div className={`flex flex-col h-full w-full ${isDark ? 'bg-[#1a1b26]' : 'bg-white'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between h-9 px-4 border-b border-gray-800 bg-[#1a1b26] flex-none">
-        <div className="flex items-center gap-4 h-full text-sm">
+      <div className={`flex items-center justify-between h-9 px-2 border-b flex-none ${
+        isDark ? 'border-gray-800 bg-[#1a1b26]' : 'border-gray-200 bg-gray-50'
+      }`}>
+        <div className="flex items-center gap-1 h-full text-sm overflow-x-auto">
+          {tabs.map(tab => (
+            <div
+              key={tab.id}
+              className={`flex items-center gap-1 h-full border-b-2 px-2 cursor-pointer transition-colors group ${
+                activeTabId === tab.id
+                  ? isDark
+                    ? 'border-blue-500 text-white'
+                    : 'border-blue-500 text-gray-900'
+                  : isDark
+                    ? 'border-transparent text-gray-400 hover:text-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTabId(tab.id)}
+            >
+              <span className="whitespace-nowrap select-none">
+                {tab.type === 'output' ? `${tab.label} (${outputLogCount})` : tab.label}
+              </span>
+              {/* Show close button for non-default tabs */}
+              {tab.id !== 'terminal-0' && tab.id !== 'output' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  className={`ml-1 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${
+                    isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                  }`}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+          
+          {/* Add terminal button */}
           <button
-            onClick={() => setActiveTab('terminal')}
-            className={`h-full border-b-2 px-2 transition-colors ${
-              activeTab === 'terminal'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-300'
+            onClick={addTerminalTab}
+            className={`flex items-center justify-center h-full px-2 transition-colors ${
+              isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
             }`}
+            title="New Terminal"
           >
-            Terminal
-          </button>
-          <button
-            onClick={() => setActiveTab('output')}
-            className={`h-full border-b-2 px-2 transition-colors ${
-              activeTab === 'output'
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            Output ({devServerLogs.length})
+            <Plus size={14} />
           </button>
         </div>
         
         {onToggle && (
           <button
             onClick={onToggle}
-            className="text-gray-400 hover:text-white transition-colors"
+            className={`ml-2 transition-colors flex-shrink-0 ${
+              isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
+            }`}
             title={isOpen ? "Minimize" : "Maximize"}
           >
             {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -68,32 +134,39 @@ export function TerminalPanel({
 
       {/* Content */}
       <div className="flex-1 relative min-h-0 overflow-hidden">
-        {/* Terminal Tab - Always kept active for process persistence */}
-        <div 
-          className="absolute inset-0 w-full h-full bg-[#1a1b26]"
-          style={{ 
-            visibility: activeTab === 'terminal' ? 'visible' : 'hidden',
-            zIndex: activeTab === 'terminal' ? 10 : 0,
-            display: activeTab === 'terminal' ? 'block' : 'none'
-          }}
-        >
-          <Terminal />
-        </div>
+        {/* Terminal Tabs - Always kept mounted for process persistence */}
+        {tabs.filter(t => t.type === 'terminal').map(tab => (
+          <div 
+            key={tab.id}
+            className={`absolute inset-0 w-full h-full ${isDark ? 'bg-[#1a1b26]' : 'bg-white'}`}
+            style={{ 
+              visibility: activeTabId === tab.id ? 'visible' : 'hidden',
+              zIndex: activeTabId === tab.id ? 10 : 0,
+              display: activeTabId === tab.id ? 'block' : 'none'
+            }}
+          >
+            <Terminal />
+          </div>
+        ))}
 
         {/* Output Tab */}
         <div 
           ref={outputRef}
-          className="absolute inset-0 w-full h-full p-4 overflow-auto bg-[#1a1b26] font-mono text-sm"
+          className={`absolute inset-0 w-full h-full p-4 overflow-auto font-mono text-sm ${
+            isDark ? 'bg-[#1a1b26]' : 'bg-white'
+          }`}
           style={{ 
-            visibility: activeTab === 'output' ? 'visible' : 'hidden',
-            zIndex: activeTab === 'output' ? 10 : 0 
+            visibility: activeTabId === 'output' ? 'visible' : 'hidden',
+            zIndex: activeTabId === 'output' ? 10 : 0 
           }}
         >
           {devServerLogs.length === 0 ? (
-            <div className="text-gray-500 italic">No output logs yet...</div>
+            <div className={`italic ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              No output logs yet...
+            </div>
           ) : (
             devServerLogs.map((log, i) => (
-              <div key={i} className="whitespace-pre-wrap mb-1 text-gray-300">
+              <div key={i} className={`whitespace-pre-wrap mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                 {log}
               </div>
             ))

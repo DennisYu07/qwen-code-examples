@@ -279,12 +279,6 @@ function WorkspaceContent() {
               sessionId={sessionId}
               isOpen={isTerminalOpen}
               onToggle={() => setIsTerminalOpen(!isTerminalOpen)}
-              onServerDetected={(port) => {
-                console.log('[Workspace] Server detected on port:', port);
-                const url = `http://localhost:${port}`;
-                setPreviewUrl(url);
-                setDevServer({ port, framework: 'Manual', url });
-              }}
             />
           </div>
         </div>

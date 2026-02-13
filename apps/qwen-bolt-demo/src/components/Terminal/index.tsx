@@ -3,6 +3,7 @@
 import { useEffect, useRef, memo } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { useTheme } from 'next-themes';
 import { useWebContainer } from '../../hooks/useWebContainer';
 import '@xterm/xterm/css/xterm.css';
 
@@ -13,45 +14,83 @@ interface TerminalProps {
 
 const SHELL_PROMPT_CHARS = ['$', '>'];
 
+const DARK_THEME = {
+  background: '#1a1b26',
+  foreground: '#a9b1d6',
+  cursor: '#c0caf5',
+  selectionBackground: '#33467c',
+  black: '#32344a',
+  red: '#f7768e',
+  green: '#9ece6a',
+  yellow: '#e0af68',
+  blue: '#7aa2f7',
+  magenta: '#bb9af7',
+  cyan: '#7dcfff',
+  white: '#a9b1d6',
+  brightBlack: '#414868',
+  brightRed: '#f7768e',
+  brightGreen: '#9ece6a',
+  brightYellow: '#e0af68',
+  brightBlue: '#7aa2f7',
+  brightMagenta: '#bb9af7',
+  brightCyan: '#7dcfff',
+  brightWhite: '#c0caf5',
+};
+
+const LIGHT_THEME = {
+  background: '#ffffff',
+  foreground: '#383a42',
+  cursor: '#526eff',
+  selectionBackground: '#d7d4f0',
+  black: '#383a42',
+  red: '#e45649',
+  green: '#50a14f',
+  yellow: '#c18401',
+  blue: '#4078f2',
+  magenta: '#a626a4',
+  cyan: '#0184bc',
+  white: '#a0a1a7',
+  brightBlack: '#4f525e',
+  brightRed: '#e06c75',
+  brightGreen: '#98c379',
+  brightYellow: '#e5c07b',
+  brightBlue: '#61afef',
+  brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2',
+  brightWhite: '#ffffff',
+};
+
+function getTerminalTheme(theme: string | undefined) {
+  return theme === 'light' ? LIGHT_THEME : DARK_THEME;
+}
+
 const Terminal = memo(({ className = '', readonly = false }: TerminalProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { webcontainer, isLoading } = useWebContainer();
+  const { theme } = useTheme();
   const shellProcessRef = useRef<any>(null);
   const initializedRef = useRef(false);
+
+  // Update terminal theme when page theme changes
+  useEffect(() => {
+    if (!terminalRef.current) return;
+    terminalRef.current.options.theme = getTerminalTheme(theme);
+  }, [theme]);
 
   // Initialize Terminal UI
   useEffect(() => {
     if (!containerRef.current || terminalRef.current) return;
+
+    const terminalTheme = getTerminalTheme(theme);
 
     // Create terminal instance
     const term = new XTerm({
       cursorBlink: true,
       convertEol: true,
       disableStdin: readonly,
-      theme: {
-        background: '#1a1b26',
-        foreground: '#a9b1d6',
-        cursor: '#c0caf5',
-        selectionBackground: '#33467c',
-        black: '#32344a',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#bb9af7',
-        cyan: '#7dcfff',
-        white: '#a9b1d6',
-        brightBlack: '#414868',
-        brightRed: '#f7768e',
-        brightGreen: '#9ece6a',
-        brightYellow: '#e0af68',
-        brightBlue: '#7aa2f7',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#7dcfff',
-        brightWhite: '#c0caf5',
-      },
+      theme: terminalTheme,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize: 14,
       lineHeight: 1.2,
@@ -176,9 +215,11 @@ const Terminal = memo(({ className = '', readonly = false }: TerminalProps) => {
 
   }, [webcontainer, isLoading]);
 
+  const containerBg = theme === 'light' ? 'bg-white' : 'bg-[#1a1b26]';
+
   return (
     <div 
-      className={`h-full w-full bg-[#1a1b26] overflow-hidden ${className}`}
+      className={`h-full w-full ${containerBg} overflow-hidden ${className}`}
       ref={containerRef}
     />
   );
