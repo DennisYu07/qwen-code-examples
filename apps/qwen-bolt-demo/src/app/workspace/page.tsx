@@ -155,24 +155,32 @@ function WorkspaceContent() {
     }
   }, [initialPrompt, messages.length, sendMessage, isLoaded, settings, setAttachedFiles, clearAllFiles]);
 
-  // 5. Auto-Start logic after file generation
+  // 5. Auto-Start logic: triggers on both new generation completion and history file restore
   const previousIsLoadingRef = useRef(isLoading);
   const hasStartedServerRef = useRef(false);
+  const previousFilesCountRef = useRef(0);
 
   useEffect(() => {
-    // Detect trigger: isLoading went from true -> false (generation finished)
-    // AND we have files 
-    // AND server not yet started (or we might want to restart? Let's assume start for now)
-    
+    const currentFilesCount = Object.keys(files).length;
+
+    // Trigger 1: isLoading went from true -> false (new generation finished)
     if (previousIsLoadingRef.current && !isLoading) {
-        // Generation just finished.
-        if (Object.keys(files).length > 0 && !hasStartedServerRef.current) {
-            console.log('[Workspace] Auto-starting dev server...');
-            startDevServer();
-            hasStartedServerRef.current = true;
-        }
+      if (currentFilesCount > 0 && !hasStartedServerRef.current) {
+        console.log('[Workspace] Auto-starting dev server after generation...');
+        startDevServer();
+        hasStartedServerRef.current = true;
+      }
     }
+
+    // Trigger 2: files went from 0 -> non-zero while NOT loading (history restore)
+    if (previousFilesCountRef.current === 0 && currentFilesCount > 0 && !isLoading && !hasStartedServerRef.current) {
+      console.log('[Workspace] Auto-starting dev server after history restore...');
+      startDevServer();
+      hasStartedServerRef.current = true;
+    }
+
     previousIsLoadingRef.current = isLoading;
+    previousFilesCountRef.current = currentFilesCount;
   }, [isLoading, files, startDevServer]);
 
   // Handle open in new tab
@@ -257,11 +265,7 @@ function WorkspaceContent() {
                 devServer={devServer}
                 isStartingServer={isStartingServer}
                 serverError={serverError}
-                sessionId={sessionId}
                 hasFiles={Object.keys(files).length > 0}
-                onStartServer={startDevServer}
-                onRefresh={refreshPreview}
-                onRestart={restartDevServer}
                 onOpenInNewTab={handleOpenInNewTab}
               />
             )}
