@@ -55,11 +55,18 @@ export function TerminalPanel({
     }
   }, [devServerLogs, activeTabId]);
 
+  // Max 2 additional terminals (3 total including the default one)
+  const terminalTabCount = tabs.filter(t => t.type === 'terminal').length;
+  const canAddTerminal = terminalTabCount < 3;
+
   const addTerminalTab = useCallback(() => {
+    const currentCount = tabs.filter(t => t.type === 'terminal').length;
+    if (currentCount >= 3) return;
+
     const newId = `terminal-${terminalIdCounter++}`;
     const newTab: TerminalTab = {
       id: newId,
-      label: `Terminal ${terminalIdCounter}`,
+      label: `Terminal ${currentCount + 1}`,
       type: 'terminal',
     };
     // Insert before the Output tab (which is always last)
@@ -71,7 +78,7 @@ export function TerminalPanel({
       return newTabs;
     });
     setActiveTabId(newId);
-  }, []);
+  }, [tabs]);
 
   const closeTab = useCallback((tabId: string) => {
     setTabs(prev => {
@@ -131,16 +138,18 @@ export function TerminalPanel({
             </div>
           ))}
           
-          {/* Add terminal button */}
-          <button
-            onClick={addTerminalTab}
-            className={`flex items-center justify-center h-full px-2 transition-colors ${
-              isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
-            }`}
-            title={t('terminal.add')}
-          >
-            <Plus size={14} />
-          </button>
+          {/* Add terminal button — after all tabs, hidden when at max (3 terminals) */}
+          {canAddTerminal && (
+            <button
+              onClick={addTerminalTab}
+              className={`flex items-center justify-center h-full px-2 transition-colors ${
+                isDark ? 'text-gray-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'
+              }`}
+              title={t('terminal.add')}
+            >
+              <Plus size={14} />
+            </button>
+          )}
         </div>
         
         {onToggle && (
