@@ -14,9 +14,10 @@ interface UseChatProps {
   onFileUpdate?: (path: string, content: string) => void;
   files: Record<string, string>;
   onFilesLoaded?: (files: Record<string, string>) => void;
+  onTurnComplete?: (assistantMessageId: string, responseText: string) => void;
 }
 
-export function useChat({ settings: propsSettings, sessionId, setSessionId, loadAllFiles, onFileUpdate, files, onFilesLoaded }: UseChatProps) {
+export function useChat({ settings: propsSettings, sessionId, setSessionId, loadAllFiles, onFileUpdate, files, onFilesLoaded, onTurnComplete }: UseChatProps) {
   // Directly access Context to ensure we always have the latest state, bypassing any prop propagation delays
   const { settings: contextSettings } = useProject();
   // Prefer context settings if available (which it should be), fallback to props
@@ -149,6 +150,7 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
           uploadedFiles: allUploadedFiles,
           knowledge: currentSettings.knowledge,
           modelConfig: currentSettings.modelConfig,
+          workspaceFiles: files,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -259,18 +261,26 @@ export function useChat({ settings: propsSettings, sessionId, setSessionId, load
       }
     } finally {
       if (accumulatedResponse) {
+          const assistantMessageId = `assistant_${Date.now()}`;
           const assistantMessage: Message = {
-            id: `assistant_${Date.now()}`,
+            id: assistantMessageId,
             role: 'assistant',
             content: accumulatedResponse,
             timestamp: new Date(),
           };
           setMessages(prev => [...prev, assistantMessage]);
+
+          // Notify parent to create a version snapshot after files sync
+          if (onTurnComplete) {
+            setTimeout(() => {
+              onTurnComplete(assistantMessageId, accumulatedResponse);
+            }, 800);
+          }
       }
       setIsLoading(false);
       setCurrentResponse('');
     }
-  }, [input, isLoading, attachedFiles, messages, sessionId, settings, loadAllFiles, setSessionId, addTokenUsage]);
+  }, [input, isLoading, attachedFiles, messages, sessionId, settings, loadAllFiles, setSessionId, addTokenUsage, onTurnComplete]);
 
   return {
     input,

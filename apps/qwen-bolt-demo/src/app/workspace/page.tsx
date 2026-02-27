@@ -23,6 +23,10 @@ import { ChatPanel } from '@/components/chat';
 import { downloadProjectAsZip } from '@/lib/file-utils';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { showToast } from '@/hooks/useToast';
+import { useVersionSnapshots } from '@/hooks/useVersionSnapshots';
+import type { VersionSnapshot } from '@/hooks/useVersionSnapshots';
+import { VersionPreviewBar } from '@/components/ui/VersionPreviewBar';
+import { RestoreConfirmDialog } from '@/components/ui/RestoreConfirmDialog';
 
 function WorkspaceContent() {
   const searchParams = useSearchParams();
@@ -34,6 +38,10 @@ function WorkspaceContent() {
   // UI state
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('code');
+  const [previewingSnapshot, setPreviewingSnapshot] = useState<VersionSnapshot | null>(null);
+  const [restoreConfirmSnapshot, setRestoreConfirmSnapshot] = useState<VersionSnapshot | null>(null);
+  // Store the real files before preview so we can restore them on exit
+  const previewSavedFilesRef = useRef<Record<string, string> | null>(null);
   
   // Custom Hooks
   // 1. Files & Session Management
@@ -51,11 +59,25 @@ function WorkspaceContent() {
     createFolder
   } = useFiles(initialSessionId);
 
-  // 2. Chat Management
+  // 2. Version Snapshots
+  const {
+    snapshots,
+    createSnapshot,
+    restoreSnapshot,
+  } = useVersionSnapshots();
+
+  // Keep a ref to the latest files so onTurnComplete always sees the current state
+  const filesRef = useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  // 3. Chat Management
   const {
     input,
     setInput,
     messages,
+    setMessages,
     isLoading,
     currentResponse,
     attachedFiles,
@@ -73,10 +95,18 @@ function WorkspaceContent() {
     files,
     onFilesLoaded: (loadedFiles) => {
        setFiles(loadedFiles);
-    }
+    },
+    onTurnComplete: (assistantMessageId, responseText) => {
+      const currentFiles = filesRef.current;
+      if (Object.keys(currentFiles).length > 0) {
+        const titleLine = responseText.split('\n').find(line => line.trim().length > 0) || 'Code update';
+        const cleanTitle = titleLine.replace(/^[#*\->\s]+/, '').trim();
+        createSnapshot(assistantMessageId, cleanTitle, currentFiles);
+      }
+    },
   });
 
-  // 3. Dev Server & Preview Management
+  // 4. Dev Server & Preview Management
   const {
     previewUrl: initialPreviewUrl,
     devServer,
@@ -110,7 +140,7 @@ function WorkspaceContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devServer]);
 
-  // 4. Resizable Terminal Panel
+  // 5. Resizable Terminal Panel
   const { 
     height: terminalHeight, 
     setHeight: setTerminalHeight,
@@ -201,7 +231,7 @@ function WorkspaceContent() {
     }
   }, [initialPrompt, messages.length, sendMessage, isLoaded, settings, setAttachedFiles, clearAllFiles]);
 
-  // 5. Auto-Start is now handled inside useDevServer hook
+  // 6. Auto-Start is now handled inside useDevServer hook
   // It watches for: webcontainer ready + files available + not loading
   // This covers both new generation (isLoading: true->false) and history restore
 
@@ -223,6 +253,24 @@ function WorkspaceContent() {
             currentResponse={currentResponse}
             messagesEndRef={messagesEndRef}
             isLoading={isLoading}
+            snapshots={snapshots}
+            latestSnapshotId={snapshots.length > 0 ? snapshots[snapshots.length - 1].id : undefined}
+            onPreviewSnapshot={(snapshotId) => {
+              const snapshot = snapshots.find(s => s.id === snapshotId);
+              if (snapshot) {
+                // Save current files before replacing with snapshot
+                previewSavedFilesRef.current = { ...filesRef.current };
+                setFiles(snapshot.files);
+                setPreviewingSnapshot(snapshot);
+                setViewMode('preview');
+              }
+            }}
+            onRestoreSnapshot={(snapshotId) => {
+              const snapshot = snapshots.find(s => s.id === snapshotId);
+              if (snapshot) {
+                setRestoreConfirmSnapshot(snapshot);
+              }
+            }}
           />
         }
         input={
@@ -249,6 +297,26 @@ function WorkspaceContent() {
 
       {/* Middle & Right: Code editor and Preview */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Version Preview Bar — only show when previewing a non-current version */}
+        {previewingSnapshot && previewingSnapshot.id !== (snapshots.length > 0 ? snapshots[snapshots.length - 1].id : '') && (
+          <VersionPreviewBar
+            snapshot={previewingSnapshot}
+            onExitPreview={() => {
+              // Restore the original (latest) files and stay in Preview view
+              if (previewSavedFilesRef.current) {
+                setFiles(previewSavedFilesRef.current);
+                previewSavedFilesRef.current = null;
+              }
+              setPreviewingSnapshot(null);
+            }}
+            onRestore={() => {
+              // Clear saved files since we're restoring (no need to go back)
+              previewSavedFilesRef.current = null;
+              setRestoreConfirmSnapshot(previewingSnapshot);
+            }}
+          />
+        )}
+
         <ViewModeToggle
           viewMode={viewMode}
           onViewModeChange={setViewMode}
@@ -334,6 +402,43 @@ function WorkspaceContent() {
           </div>
         </div>
       </div>
+      {/* Restore Confirm Dialog */}
+      {restoreConfirmSnapshot && (
+        <RestoreConfirmDialog
+          snapshot={restoreConfirmSnapshot}
+          onConfirm={() => {
+            const snapshot = restoreConfirmSnapshot;
+            const restoredFiles = restoreSnapshot(snapshot.id);
+            if (restoredFiles) {
+              setFiles(restoredFiles);
+
+              // Insert restore conversation messages
+              const userMsg = {
+                id: `user_restore_${Date.now()}`,
+                role: 'user' as const,
+                content: `Restore version: ${snapshot.title}`,
+                timestamp: new Date(),
+              };
+              const assistantMsgId = `assistant_restore_${Date.now()}`;
+              const assistantMsg = {
+                id: assistantMsgId,
+                role: 'assistant' as const,
+                content: `I've restored your project to the version: "${snapshot.title}"`,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, userMsg, assistantMsg]);
+
+              // Create a new snapshot for the restored state
+              createSnapshot(assistantMsgId, `(Restored) ${snapshot.title}`, restoredFiles);
+
+              showToast('Version restored', 'success');
+            }
+            setRestoreConfirmSnapshot(null);
+            setPreviewingSnapshot(null);
+          }}
+          onCancel={() => setRestoreConfirmSnapshot(null)}
+        />
+      )}
     </div>
   );
 }

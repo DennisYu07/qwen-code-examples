@@ -163,6 +163,18 @@
     "step5Title": "键盘快捷键",
     "step5Desc": "使用 ⌘1/⌘2 切换视图，⌘S 下载项目，⌘J 切换终端显示。"
   },
+  "version": {
+    "versionLabel": "版本 {{number}}",
+    "preview": "预览此版本",
+    "restore": "回退到此版本",
+    "restored": "版本已回退",
+    "previewingVersion": "正在预览版本",
+    "exitPreview": "退出预览",
+    "restoreThisVersion": "回退到此版本",
+    "restoreConfirmTitle": "确定要回退到此版本吗？",
+    "cancel": "取消",
+    "restoreVersion": "回退版本"
+  },
   "toast": {
     "codeCopied": "代码已复制到剪贴板",
     "projectDownloaded": "项目下载已开始",

@@ -1,6 +1,6 @@
 'use client';
 
-import { KeyboardEvent, useEffect, useRef } from 'react';
+import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Send, Square } from 'lucide-react';
 import { FileAttachment } from '@/components/FileAttachment';
 import { TokenDisplay } from '@/components/TokenDisplay';
@@ -45,11 +45,14 @@ export function ChatInput({
 }: ChatInputProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposing, setIsComposing] = useState(false);
 
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ignore Enter while IME is composing (e.g. selecting Chinese/Japanese candidates)
+    if (isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isLoading) return; // Prevent send if loading
+      if (isLoading) return;
       onSend();
     }
   };
@@ -86,6 +89,8 @@ export function ChatInput({
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyPress}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           placeholder={t('chat.placeholder')}
           disabled={isLoading}
           className="w-full px-6 py-5 pr-14 bg-white dark:bg-gray-900 border border-gray-300/60 dark:border-gray-700/60 rounded-2xl resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"

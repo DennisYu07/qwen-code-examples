@@ -163,6 +163,18 @@
     "step5Title": "Keyboard Shortcuts",
     "step5Desc": "Use ⌘1/⌘2 to switch views, ⌘S to download, and ⌘J to toggle the terminal."
   },
+  "version": {
+    "versionLabel": "Version {{number}}",
+    "preview": "Preview this version",
+    "restore": "Restore this version",
+    "restored": "Version restored",
+    "previewingVersion": "Previewing version",
+    "exitPreview": "Exit preview",
+    "restoreThisVersion": "Restore this version",
+    "restoreConfirmTitle": "Do you want to restore this version?",
+    "cancel": "Cancel",
+    "restoreVersion": "Restore version"
+  },
   "toast": {
     "codeCopied": "Code copied to clipboard",
     "projectDownloaded": "Project download started",

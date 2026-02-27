@@ -313,7 +313,7 @@ You can reference, read, or modify these files as needed.
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, history, sessionId: clientSessionId, uploadedFiles, knowledge, modelConfig } = await request.json();
+    const { message, history, sessionId: clientSessionId, uploadedFiles, knowledge, modelConfig, workspaceFiles } = await request.json();
     const sessionId = clientSessionId || randomUUID();
 
     if (!message) {
@@ -325,6 +325,35 @@ export async function POST(request: NextRequest) {
 
     // Create workspace directory for SDK built-in tools
     const workspaceDir = createSessionWorkspace(sessionId);
+
+    // Sync workspace files from frontend to disk.
+    // Only write files that are missing or differ from what's already on disk,
+    // so we avoid redundant I/O while still recovering after a stop/cancel.
+    if (workspaceFiles && typeof workspaceFiles === 'object') {
+      const fileStore = getFileStore(sessionId);
+      for (const [filePath, content] of Object.entries(workspaceFiles)) {
+        if (typeof content !== 'string') continue;
+        const cleanPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
+        const fullPath = path.join(workspaceDir, cleanPath);
+
+        // Skip if the file already exists on disk with the same content
+        let needsWrite = true;
+        try {
+          if (fs.existsSync(fullPath)) {
+            const existing = fs.readFileSync(fullPath, 'utf-8');
+            if (existing === content) needsWrite = false;
+          }
+        } catch {
+          // If we can't read it, just write it
+        }
+
+        if (needsWrite) {
+          fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+          fs.writeFileSync(fullPath, content, 'utf-8');
+        }
+        fileStore.set(cleanPath, content);
+      }
+    }
 
     // Write uploaded files to disk so SDK can reference them
     const filesContext = buildUploadedFilesContext(uploadedFiles, sessionId);
@@ -477,8 +506,10 @@ export async function POST(request: NextRequest) {
         if (fileWatcher) {
           try { fileWatcher.close(); } catch {}
         }
+        // Only clean up in-memory store; keep workspace on disk so the next
+        // request for the same session can reuse the files without the frontend
+        // having to re-send them all.
         sessionFileStore.delete(sessionId);
-        cleanupWorkspace(workspaceDir);
         void queryInstance?.close();
       },
     });
