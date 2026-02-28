@@ -140,19 +140,51 @@ export function ModelConfigSettings() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                    {t('projectSettings.modelSelectDesc')}
                 </p>
-                <select
-                  value={modelConfig.model}
-                  onChange={(e) => setModelConfig(prev => ({ ...prev, model: e.target.value }))}
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-                >
-                  <optgroup label="Qwen Models">
-                    <option value="qwen-coder-plus">Qwen Coder Plus - Most capable coding model</option>
-                    <option value="qwen-coder-turbo">Qwen Coder Turbo - Fast and efficient</option>
-                    <option value="qwen-plus">Qwen Plus - General purpose</option>
-                    <option value="qwen-turbo">Qwen Turbo - Balanced performance</option>
-                    <option value="qwen-max">Qwen Max - Maximum capability</option>
-                  </optgroup>
-                </select>
+                {modelConfig.authType === 'openai-api-key' ? (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="openai-model-suggestions"
+                      value={modelConfig.model}
+                      onChange={(e) => setModelConfig(prev => ({ ...prev, model: e.target.value }))}
+                      placeholder={t('modelConfig.customModelPlaceholder')}
+                      className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
+                    />
+                    <datalist id="openai-model-suggestions">
+                      <option value="claude-sonnet-4-20250514" />
+                      <option value="claude-3-7-sonnet-20250219" />
+                      <option value="gpt-4.1" />
+                      <option value="gpt-4.1-mini" />
+                      <option value="gpt-4o" />
+                      <option value="gpt-4o-mini" />
+                      <option value="o3" />
+                      <option value="o4-mini" />
+                      <option value="deepseek-chat" />
+                      <option value="deepseek-reasoner" />
+                      <option value="qwen-coder-plus" />
+                      <option value="qwen-coder-turbo" />
+                      <option value="qwen-plus" />
+                      <option value="qwen-max" />
+                    </datalist>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                      {t('modelConfig.customModelHint')}
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={modelConfig.model}
+                    onChange={(e) => setModelConfig(prev => ({ ...prev, model: e.target.value }))}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
+                  >
+                    <optgroup label="Qwen Models">
+                      <option value="qwen-coder-plus">Qwen Coder Plus - Most capable coding model</option>
+                      <option value="qwen-coder-turbo">Qwen Coder Turbo - Fast and efficient</option>
+                      <option value="qwen-plus">Qwen Plus - General purpose</option>
+                      <option value="qwen-turbo">Qwen Turbo - Balanced performance</option>
+                      <option value="qwen-max">Qwen Max - Maximum capability</option>
+                    </optgroup>
+                  </select>
+                )}
               </div>
             </div>
 

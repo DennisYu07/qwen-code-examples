@@ -88,6 +88,8 @@
     "qwenOauthDesc": "Free with 2,000 daily requests. Browser login required.",
     "openaiApiKey": "OpenAI API Key",
     "openaiApiKeyDesc": "Use OpenAI-compatible API with custom endpoint.",
+    "customModelPlaceholder": "Type or select a model name...",
+    "customModelHint": "Select a suggested model or type any custom model name",
     "usingQwenOauth": "Using Qwen OAuth (Free)",
     "usingOpenaiKey": "Using OpenAI API Key",
     "mostCapable": "Most capable",

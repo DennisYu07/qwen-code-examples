@@ -15,6 +15,8 @@ export function useKeyboardShortcuts(shortcuts: ShortcutAction[]) {
     (event: KeyboardEvent) => {
       const isCtrlOrMeta = event.ctrlKey || event.metaKey;
 
+      if (!event.key) return;
+
       for (const shortcut of shortcuts) {
         const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
         const ctrlMatch = shortcut.ctrlOrMeta ? isCtrlOrMeta : !isCtrlOrMeta;

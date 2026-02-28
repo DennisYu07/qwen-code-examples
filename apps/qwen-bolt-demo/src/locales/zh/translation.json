@@ -88,6 +88,8 @@
     "qwenOauthDesc": "每日 2,000 次免费请求，需浏览器登录。",
     "openaiApiKey": "OpenAI API Key",
     "openaiApiKeyDesc": "使用 OpenAI 兼容 API 和自定义端点。",
+    "customModelPlaceholder": "输入或选择模型名称...",
+    "customModelHint": "选择推荐模型或输入任意自定义模型名称",
     "usingQwenOauth": "使用 Qwen OAuth（免费）",
     "usingOpenaiKey": "使用 OpenAI API Key",
     "mostCapable": "最强能力",
