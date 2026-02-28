@@ -8,10 +8,15 @@ interface CodeRendererProps {
   files: Record<string, string>;
   readOnly?: boolean;
   onCodeChange?: (code: string, filename?: string) => void;
+  onSaveFile?: (path: string, content: string) => void;
   tabBarExtraContent?: React.ReactNode;
   activeFile?: string;
   onSelectFile?: (path: string) => void;
   sessionId?: string;
+  onCreateFile?: (path: string, content: string) => void;
+  onCreateFolder?: (path: string) => void;
+  onDeleteFile?: (path: string) => void;
+  onRenameFile?: (oldPath: string, newPath: string) => void;
 }
 
 const CodeRenderer: React.FC<CodeRendererProps> = ({
@@ -19,10 +24,15 @@ const CodeRenderer: React.FC<CodeRendererProps> = ({
   files = {},
   readOnly = true,
   onCodeChange,
+  onSaveFile,
   tabBarExtraContent,
   activeFile,
   onSelectFile,
   sessionId,
+  onCreateFile,
+  onCreateFolder,
+  onDeleteFile,
+  onRenameFile,
 }) => {
   // Handle multi-file content change
   const handleMultiFileContentChange = (code: string, filename: string) => {
@@ -38,10 +48,15 @@ const CodeRenderer: React.FC<CodeRendererProps> = ({
         readOnly={readOnly}
         isComplete={isComplete}
         onCodeChange={handleMultiFileContentChange}
+        onSaveFile={onSaveFile}
         tabBarExtraContent={tabBarExtraContent}
         activeFile={activeFile}
         onSelectFile={onSelectFile}
         sessionId={sessionId}
+        onCreateFile={onCreateFile}
+        onCreateFolder={onCreateFolder}
+        onDeleteFile={onDeleteFile}
+        onRenameFile={onRenameFile}
       />
     </div>
   );

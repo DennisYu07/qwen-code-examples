@@ -1,9 +1,13 @@
 'use client';
 
-import { KeyboardEvent } from 'react';
-import { Send, X, File, Folder } from 'lucide-react';
+import { KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Send, Square } from 'lucide-react';
 import { FileAttachment } from '@/components/FileAttachment';
 import { TokenDisplay } from '@/components/TokenDisplay';
+import { AttachedFilesDisplay } from '@/components/chat';
+import type { AttachedFileItem } from '@/components/chat';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { useTranslation } from 'react-i18next';
 
 interface AttachedFile {
   id: string;
@@ -22,86 +26,10 @@ interface ChatInputProps {
   attachedFiles: AttachedFile[];
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onStop: () => void;
   onFilesAttached: (files: AttachedFile[]) => void;
   onFileRemoved: (fileId: string) => void;
   onFolderRemoved: (folderName: string) => void;
-}
-
-function AttachedFilesDisplay({ 
-  attachedFiles, 
-  onFileRemoved, 
-  onFolderRemoved 
-}: { 
-  attachedFiles: AttachedFile[];
-  onFileRemoved: (fileId: string) => void;
-  onFolderRemoved: (folderName: string) => void;
-}) {
-  if (attachedFiles.length === 0) return null;
-
-  // Group by folder
-  const folderGroups = new Map<string, AttachedFile[]>();
-  const standaloneFiles: AttachedFile[] = [];
-  
-  attachedFiles.forEach(file => {
-    if (file.isFolder && file.folderName) {
-      if (!folderGroups.has(file.folderName)) {
-        folderGroups.set(file.folderName, []);
-      }
-      folderGroups.get(file.folderName)!.push(file);
-    } else {
-      standaloneFiles.push(file);
-    }
-  });
-
-  return (
-    <div className="mb-3 flex flex-wrap gap-2">
-      {/* Display folders */}
-      {Array.from(folderGroups.entries()).map(([folderName, files]) => (
-        <div
-          key={folderName}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs group"
-        >
-          <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-          <span className="text-blue-600 dark:text-blue-400 font-medium">
-            {folderName}
-          </span>
-          <span className="text-gray-500 dark:text-gray-400 text-[10px]">
-            ({files.length} files)
-          </span>
-          <button
-            onClick={() => onFolderRemoved(folderName)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500/20 rounded"
-            title="Remove folder"
-          >
-            <X className="w-3 h-3 text-red-500" />
-          </button>
-        </div>
-      ))}
-      
-      {/* Display standalone files */}
-      {standaloneFiles.map((file) => (
-        <div
-          key={file.id}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs group"
-        >
-          <File className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-          <span className="text-blue-600 dark:text-blue-400 font-medium truncate max-w-[150px]" title={file.path}>
-            {file.name}
-          </span>
-          <span className="text-gray-500 dark:text-gray-400 text-[10px]">
-            {(file.size / 1024).toFixed(1)}KB
-          </span>
-          <button
-            onClick={() => onFileRemoved(file.id)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500/20 rounded"
-            title="Remove file"
-          >
-            <X className="w-3 h-3 text-red-500" />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ChatInput({
@@ -110,23 +38,40 @@ export function ChatInput({
   attachedFiles,
   onInputChange,
   onSend,
+  onStop,
   onFilesAttached,
   onFileRemoved,
   onFolderRemoved,
 }: ChatInputProps) {
+  const { t } = useTranslation();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposing, setIsComposing] = useState(false);
+
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ignore Enter while IME is composing (e.g. selecting Chinese/Japanese candidates)
+    if (isComposing) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (isLoading) return;
       onSend();
     }
   };
 
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 110), 300); // Min 110px (approx 4 rows), Max 300px
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [input]);
+
   return (
     <div className="p-4 border-t border-gray-200/60 dark:border-gray-800/60 bg-white dark:bg-black">
       <AttachedFilesDisplay 
-        attachedFiles={attachedFiles}
+        attachedFiles={attachedFiles as AttachedFileItem[]}
         onFileRemoved={onFileRemoved}
         onFolderRemoved={onFolderRemoved}
+        className="mb-3"
       />
       
       <div className="flex gap-2 mb-2">
@@ -140,21 +85,35 @@ export function ChatInput({
       
       <div className="relative">
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="What would you like to build today?"
+          onKeyDown={handleKeyPress}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          placeholder={t('chat.placeholder')}
           disabled={isLoading}
           className="w-full px-6 py-5 pr-14 bg-white dark:bg-gray-900 border border-gray-300/60 dark:border-gray-700/60 rounded-2xl resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50 text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"
           rows={4}
+          style={{ minHeight: '110px' }}
         />
-        <button
-          onClick={onSend}
-          disabled={isLoading || !input.trim()}
-          className="absolute right-3 bottom-3 p-2.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed rounded-full transition-all flex items-center justify-center shadow-sm"
-        >
-          <Send className="w-4 h-4 text-white" />
-        </button>
+        <Tooltip content={isLoading ? t('chat.stop') : t('chat.send')} side="top">
+          <button
+            onClick={isLoading ? onStop : onSend}
+            disabled={!isLoading && !input.trim()}
+            className={`absolute right-3 bottom-3 p-2.5 rounded-full transition-all flex items-center justify-center shadow-sm ${
+              isLoading 
+                ? 'bg-red-500 hover:bg-red-600' 
+                : 'bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed'
+            }`}
+          >
+            {isLoading ? (
+              <Square className="w-4 h-4 text-white fill-white" />
+            ) : (
+              <Send className="w-4 h-4 text-white" />
+            )}
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

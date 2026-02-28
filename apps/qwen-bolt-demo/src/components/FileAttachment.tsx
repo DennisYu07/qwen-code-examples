@@ -2,6 +2,9 @@
 
 import { Paperclip, File, Folder, X } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Tooltip } from '@/components/ui/Tooltip';
+import logger from '@/lib/logger';
 
 export interface AttachedFile {
   id: string;
@@ -21,6 +24,7 @@ interface FileAttachmentProps {
 }
 
 export function FileAttachment({ attachedFiles, onFilesAttached, onFileRemoved }: FileAttachmentProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -41,8 +45,23 @@ export function FileAttachment({ attachedFiles, onFilesAttached, onFileRemoved }
       folderName = firstPath.split('/')[0];
     }
 
+    const MAX_SIZE = 3 * 1024 * 1024; // 3MB Limit (Total or per file? User said "upload existing project... only allow 3M". Usually means total or per file. Let's assume individual file safety first, or maybe filter out large files?)
+
+    // Let's filter first to avoid reading large files
+    const validSizeFiles = fileArray.filter(file => {
+        if (file.size > MAX_SIZE) {
+            logger.warn(`[FileAttachment] File ${file.name} (size: ${file.size}) exceeds limit of ${MAX_SIZE} bytes. Skipped.`);
+            return false;
+        }
+        return true;
+    });
+
+    if (validSizeFiles.length < fileArray.length) {
+        alert(`Some files were skipped because they exceed the 3MB size limit.`);
+    }
+
     const uploadedFiles = await Promise.all(
-      fileArray.map(async (file) => {
+      validSizeFiles.map(async (file) => {
         try {
           const content = await file.text();
           // Use webkitRelativePath for folder uploads, otherwise use file.name
@@ -58,24 +77,31 @@ export function FileAttachment({ attachedFiles, onFilesAttached, onFileRemoved }
             fileCount: isFolder ? fileArray.length : undefined,
           } as AttachedFile;
         } catch (error) {
-          console.error(`Failed to read file ${file.name}:`, error);
+          logger.error(`Failed to read file ${file.name}:`, error);
           return null;
         }
       })
     );
 
     // Filter out failed uploads
-    const validFiles = uploadedFiles.filter((f): f is AttachedFile => f !== null);
+    let validFiles = uploadedFiles.filter((f): f is AttachedFile => f !== null);
+
+    // Flatten logic: If all files share the same top-level folder, strip it
+    if (validFiles.length > 0 && isFolder && folderName) {
+         const commonPrefix = `${folderName}/`;
+         // Double check if ALL files start with this prefix (they should if it was a folder upload)
+         const allHavePrefix = validFiles.every(f => f.path.startsWith(commonPrefix));
+         
+         if (allHavePrefix) {
+             validFiles = validFiles.map(f => ({
+                 ...f,
+                 path: f.path.slice(commonPrefix.length), // Remove the "MyApp/" prefix
+             }));
+         }
+    }
     
     if (validFiles.length > 0) {
       onFilesAttached(validFiles);
-      console.log('[FileAttachment] Uploaded files:', validFiles.map(f => ({ 
-        name: f.name, 
-        path: f.path, 
-        size: f.size,
-        isFolder: f.isFolder,
-        folderName: f.folderName,
-      })));
     }
     
     setIsOpen(false);
@@ -86,13 +112,14 @@ export function FileAttachment({ attachedFiles, onFilesAttached, onFileRemoved }
   return (
     <div className="relative">
       {/* Attach button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors"
-        title="Attach files"
-      >
-        <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-      </button>
+      <Tooltip content={t('fileAttachment.attach')}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg transition-colors"
+        >
+          <Paperclip className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+        </button>
+      </Tooltip>
 
       {/* Popover */}
       {isOpen && (
@@ -110,14 +137,14 @@ export function FileAttachment({ attachedFiles, onFilesAttached, onFileRemoved }
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             >
               <File className="w-4 h-4" />
-              Upload Files
+              {t('fileAttachment.uploadFiles')}
             </button>
             <button
               onClick={() => folderInputRef.current?.click()}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             >
               <Folder className="w-4 h-4" />
-              Upload Folder
+              {t('fileAttachment.uploadFolder')}
             </button>
           </div>
         </>

@@ -3,22 +3,26 @@
 import { Settings, X } from 'lucide-react';
 import { useState } from 'react';
 import { useEditor } from '@/contexts/EditorContext';
+import { useTranslation } from 'react-i18next';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export function EditorSettings() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const { settings, updateSettings, resetSettings } = useEditor();
 
   return (
     <>
       {/* Settings Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-        aria-label="Editor settings"
-        title="Editor Settings - Configure font size and line height"
-      >
-        <Settings className="w-5 h-5 text-gray-400" />
-      </button>
+      <Tooltip content={t('editor.open')} side="bottom">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+          aria-label="Editor settings"
+        >
+          <Settings className="w-5 h-5 text-gray-400" />
+        </button>
+      </Tooltip>
 
       {/* Settings Modal */}
       {isOpen && (
@@ -27,7 +31,7 @@ export function EditorSettings() {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Editor Settings
+                {t('editor.title')}
               </h2>
               <button
                 onClick={() => setIsOpen(false)}
@@ -42,7 +46,7 @@ export function EditorSettings() {
               {/* Font Size */}
               <div className="space-y-2">
                 <label className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <span>Font Size</span>
+                  <span>{t('editor.fontSize')}</span>
                   <span className="text-blue-500">{settings.fontSize}px</span>
                 </label>
                 <input
@@ -58,7 +62,7 @@ export function EditorSettings() {
               {/* Line Height */}
               <div className="space-y-2">
                 <label className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <span>Line Height</span>
+                  <span>{t('editor.lineHeight')}</span>
                   <span className="text-blue-500">{settings.lineHeight}</span>
                 </label>
                 <input
@@ -79,13 +83,13 @@ export function EditorSettings() {
                 onClick={resetSettings}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
               >
-                Reset to Default
+                {t('editor.resetDefault')}
               </button>
               <button
                 onClick={() => setIsOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
               >
-                Done
+                {t('projectSettings.done')}
               </button>
             </div>
           </div>

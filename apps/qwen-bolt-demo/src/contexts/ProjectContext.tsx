@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import logger from '@/lib/logger';
 
 export interface UploadedFile {
   id: string;
@@ -9,6 +10,7 @@ export interface UploadedFile {
   content: string;
   type: 'file' | 'folder';
   size: number;
+  folderName?: string; // Original folder name if uploaded as part of a folder
 }
 
 export interface ModelConfig {
@@ -26,6 +28,7 @@ export interface ProjectSettings {
 
 interface ProjectContextType {
   settings: ProjectSettings;
+  isLoaded: boolean;
   updateKnowledge: (knowledge: string) => void;
   addFiles: (files: UploadedFile[]) => void;
   removeFile: (fileId: string) => void;
@@ -41,7 +44,7 @@ const DEFAULT_SETTINGS: ProjectSettings = {
     authType: 'qwen-oauth',
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'qwen3-coder-plus',
+    model: 'qwen-coder-plus',
   },
 };
 
@@ -51,6 +54,7 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<ProjectSettings>(DEFAULT_SETTINGS);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -58,11 +62,17 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setSettings(parsed);
+        // Merge with default settings to ensure new fields are present
+        setSettings(prev => ({
+            ...prev,
+            ...parsed,
+            modelConfig: { ...prev.modelConfig, ...parsed.modelConfig }
+        }));
       } catch (e) {
-        console.error('Failed to parse project settings:', e);
+        logger.error('Failed to parse project settings:', e);
       }
     }
+    setIsLoaded(true);
   }, []);
 
   // Save settings to localStorage whenever they change
@@ -96,33 +106,41 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateModelConfig = useCallback((config: Partial<ModelConfig>) => {
-    console.log('[ProjectContext] updateModelConfig called with:', config);
-    setSettings(prev => {
-      const newSettings = {
-        ...prev,
-        modelConfig: { ...prev.modelConfig, ...config },
-      };
-      console.log('[ProjectContext] New settings:', newSettings);
-      return newSettings;
-    });
+    setSettings(prev => ({
+      ...prev,
+      modelConfig: { ...prev.modelConfig, ...config },
+    }));
   }, []);
 
   const resetSettings = useCallback(() => {
     setSettings(DEFAULT_SETTINGS);
   }, []);
 
+  const value = React.useMemo(() => ({
+    settings,
+    isLoaded,
+    updateKnowledge,
+    addFiles,
+    removeFile,
+    clearAllFiles,
+    updateModelConfig,
+    resetSettings,
+  }), [settings, isLoaded, updateKnowledge, addFiles, removeFile, clearAllFiles, updateModelConfig, resetSettings]);
+
+  // Delay rendering children until settings are loaded from localStorage.
+  // This prevents hydration mismatch: SSR renders with DEFAULT_SETTINGS,
+  // but the client may load different settings from localStorage, causing
+  // components like ModelSelector to render different content.
+  if (!isLoaded) {
+    return (
+      <ProjectContext.Provider value={value}>
+        {null}
+      </ProjectContext.Provider>
+    );
+  }
+
   return (
-    <ProjectContext.Provider
-      value={{
-        settings,
-        updateKnowledge,
-        addFiles,
-        removeFile,
-        clearAllFiles,
-        updateModelConfig,
-        resetSettings,
-      }}
-    >
+    <ProjectContext.Provider value={value}>
       {children}
     </ProjectContext.Provider>
   );
@@ -136,7 +154,7 @@ export function useProject() {
   return context;
 }
 
-// 用于检查是否在 Provider 内部
+// Check whether we are inside a Provider
 export function useProjectOptional() {
   return useContext(ProjectContext);
 }

@@ -1,42 +1,91 @@
 import { FileSystemTree, DirectoryNode } from '@webcontainer/api';
+import JSZip from 'jszip';
+import logger from '@/lib/logger';
+
+export async function downloadProjectAsZip(files: Record<string, string>, projectName = 'project') {
+  const zip = new JSZip();
+
+  for (const [path, content] of Object.entries(files)) {
+    // Remove leading slash
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    zip.file(cleanPath, content);
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  
+  // Trigger download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${projectName}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Lock files generated on the host platform may contain platform-specific optional
+// dependencies (e.g. @rollup/rollup-darwin-arm64) that break npm install inside
+// WebContainer (Linux). Filter them out before mounting.
+export const EXCLUDED_FILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml']);
+
+/**
+ * Remove lock files and other excluded entries from a file map.
+ * Used when restoring files from history (IndexedDB) or server responses.
+ */
+export function filterExcludedFiles(files: Record<string, string>): Record<string, string> {
+  const filtered: Record<string, string> = {};
+  for (const [path, content] of Object.entries(files)) {
+    const fileName = path.split('/').pop() || '';
+    if (!EXCLUDED_FILES.has(fileName)) {
+      filtered[path] = content;
+    }
+  }
+  return filtered;
+}
 
 export function convertFilesToTree(files: Record<string, string>): FileSystemTree {
   const tree: FileSystemTree = {};
 
   for (const [path, content] of Object.entries(files)) {
-    // Remove leading slash if present to avoid empty string root keys
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    // 1. Clean the path (remove leading slash)
+    let cleanPath = path.startsWith('/') ? path.substring(1) : path;
+
+    // 2. Skip lock files to avoid platform-specific dependency issues in WebContainer
+    const fileName = cleanPath.split('/').pop() || '';
+    if (EXCLUDED_FILES.has(fileName)) continue;
+    
+    // 2. Split path into segments
     const parts = cleanPath.split('/');
-    let current = tree;
+    let currentLevel = tree;
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
-      if (!part) continue; // Skip empty parts just in case
-
       const isFile = i === parts.length - 1;
 
       if (isFile) {
-        current[part] = {
+        // Create file node
+        currentLevel[part] = {
           file: {
             contents: content,
           },
         };
       } else {
-        if (!current[part]) {
-          current[part] = {
+        // Create directory node if it doesn't exist
+        if (!currentLevel[part]) {
+          currentLevel[part] = {
             directory: {},
           };
         }
         
-        const node = current[part];
+        // Navigate down ONLY if it is a directory
+        const node = currentLevel[part];
         if ('directory' in node) {
-          current = node.directory;
+          currentLevel = node.directory;
         } else {
-             // Conflict: trying to treat a file as a directory
-             // In a realistic scenario, valid file paths shouldn't conflict like this (foo vs foo/bar)
-             // But if so, we simply can't proceed down this branch. Overwriting would be destructive.
-             console.warn(`Path conflict at ${part} for ${path}`);
-             break;
+          // Path conflict: trying to use a file name as a folder name
+          logger.warn(`[FileTree] Path conflict at ${part} for ${path}. Skipping.`);
+          break;
         }
       }
     }

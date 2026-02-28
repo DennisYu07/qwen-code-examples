@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MultiFileCodeRendererProps } from './types';
 import { FileTree } from './FileTree';
 import { CodeEditorPanel } from './CodeEditorPanel';
-import { PanelLeft, GripVertical } from 'lucide-react';
+import { PanelLeft, GripVertical, Copy, Check, Save, RotateCcw } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
+import logger from '@/lib/logger';
+import { showToast } from '@/hooks/useToast';
 
 export const MultiFileCodeRenderer: React.FC<
   MultiFileCodeRendererProps & { tabBarExtraContent?: React.ReactNode; sessionId?: string }
@@ -13,45 +16,136 @@ export const MultiFileCodeRenderer: React.FC<
   readOnly = true,
   isComplete = true,
   onCodeChange,
+  onSaveFile,
   activeFile: propActiveFile,
   onSelectFile,
   tabBarExtraContent,
   sessionId,
+  onCreateFile,
+  onCreateFolder,
+  onDeleteFile,
+  onRenameFile,
 }) => {
-  const [activeFile, setActiveFile] = useState<string>('');
+  // Derive effective active file from props
+  // We sort keys to ensure deterministic behavior
+  const filePaths = React.useMemo(() => Object.keys(files).sort(), [files]);
+  const activeFile = propActiveFile || filePaths[0] || '';
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [fileTreeWidth, setFileTreeWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // Track unsaved edits per file: path -> edited content
+  const [unsavedChanges, setUnsavedChanges] = useState<Record<string, string>>({});
+
+  const hasUnsavedChange = activeFile && unsavedChanges[activeFile] !== undefined;
+
+  const handleSave = useCallback(() => {
+    if (!activeFile || unsavedChanges[activeFile] === undefined) return;
+    const editedContent = unsavedChanges[activeFile];
+    if (onSaveFile) {
+      onSaveFile(activeFile, editedContent);
+    }
+    // Remove from unsaved after save
+    setUnsavedChanges(prev => {
+      const next = { ...prev };
+      delete next[activeFile];
+      return next;
+    });
+  }, [activeFile, unsavedChanges, onSaveFile]);
+
+  const handleReset = () => {
+    if (!activeFile || !hasUnsavedChange) return;
+    // Remove unsaved change — CodeEditorPanel will re-sync from files[activeFile]
+    setUnsavedChanges(prev => {
+      const next = { ...prev };
+      delete next[activeFile];
+      return next;
+    });
+  };
+
+  const handleCopy = async () => {
+    if (!activeFile || !files[activeFile]) return;
+    try {
+      await navigator.clipboard.writeText(files[activeFile]);
+      setCopied(true);
+      showToast('Code copied to clipboard', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      logger.error('Failed to copy code:', err);
+      showToast('Failed to copy code', 'error');
+    }
+  };
+
+  // Auto-switch to file if search query matches content and current file does not
+  useEffect(() => {
+    if (!searchQuery.trim() || !files) return;
+
+    const lowerQuery = searchQuery.toLowerCase();
+    const currentFileContent = files[activeFile] || '';
+    
+    // If current file already has the match, don't switch (user might be browsing matches in current file)
+    if (currentFileContent.toLowerCase().includes(lowerQuery)) {
+      return;
+    }
+
+    // Otherwise, find the first file that matches
+    for (const path of filePaths) {
+      if (path === activeFile) continue;
+      
+      const content = files[path] || '';
+      if (
+        path.toLowerCase().includes(lowerQuery) || 
+        content.toLowerCase().includes(lowerQuery)
+      ) {
+        onSelectFile?.(path);
+        break;
+      }
+    }
+  }, [searchQuery, files, activeFile, onSelectFile, filePaths]);
   
   // Refs for drag tracking
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
-  // Initialize active file
-  useEffect(() => {
-    if (propActiveFile) {
-      setActiveFile(propActiveFile);
-    } else {
-      // Set first file as active if none specified
-      const firstFile = Object.keys(files)[0];
-      if (firstFile) {
-        setActiveFile(firstFile);
-      }
-    }
-  }, [propActiveFile, files]);
-
   // Handle file selection
   const handleSelectFile = (path: string) => {
-    setActiveFile(path);
     onSelectFile?.(path);
   };
 
-  // Handle code change with proper typing
+  // Handle code change: track as unsaved instead of immediately saving
   const handleCodeChange = (code: string, filename?: string) => {
-    if (onCodeChange && filename) {
+    if (!filename) return;
+    // Check if content actually differs from the saved version
+    if (code === files[filename]) {
+      // Content matches saved version, remove from unsaved
+      setUnsavedChanges(prev => {
+        const next = { ...prev };
+        delete next[filename];
+        return next;
+      });
+    } else {
+      // Track as unsaved change
+      setUnsavedChanges(prev => ({ ...prev, [filename]: code }));
+    }
+    if (onCodeChange) {
       onCodeChange(code, filename);
     }
   };
+
+  // Keyboard shortcut: Cmd+S / Ctrl+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave]);
 
   // Handle drag start
   const handleDragStart = (e: React.MouseEvent) => {
@@ -99,7 +193,20 @@ export const MultiFileCodeRenderer: React.FC<
       {sidebarOpen && (
         <>
           <div style={{ width: `${fileTreeWidth}px` }} className="flex-shrink-0">
-            <FileTree files={files} activeFile={activeFile} onSelectFile={handleSelectFile} sessionId={sessionId} />
+            <FileTree 
+              files={files} 
+              activeFile={activeFile} 
+              onSelectFile={handleSelectFile} 
+              sessionId={sessionId}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              isSearchOpen={isSearchOpen}
+              onSearchOpenChange={setIsSearchOpen}
+              onCreateFile={onCreateFile}
+              onCreateFolder={onCreateFolder}
+              onDeleteFile={onDeleteFile}
+              onRenameFile={onRenameFile}
+            />
           </div>
           
           {/* Resize handle */}
@@ -121,31 +228,65 @@ export const MultiFileCodeRenderer: React.FC<
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 px-4 py-2">
           <div className="flex items-center gap-2">
-            <button
-              className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded transition-colors"
-              onClick={() => setSidebarOpen((v) => !v)}
-              aria-label={sidebarOpen ? 'Collapse file tree' : 'Expand file tree'}
-            >
-              <PanelLeft
-                className={`h-4 w-4 text-gray-400 transition-transform ${
-                  sidebarOpen ? '' : 'rotate-180'
-                }`}
-              />
-            </button>
+            <Tooltip content={sidebarOpen ? 'Collapse file tree' : 'Expand file tree'} side="bottom">
+              <button
+                className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded transition-colors"
+                onClick={() => setSidebarOpen((v) => !v)}
+              >
+                <PanelLeft
+                  className={`h-4 w-4 text-gray-400 transition-transform ${
+                    sidebarOpen ? '' : 'rotate-180'
+                  }`}
+                />
+              </button>
+            </Tooltip>
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{activeFile}</span>
           </div>
 
-          {tabBarExtraContent}
+          <div className="flex items-center gap-2">
+            {hasUnsavedChange && (
+              <>
+                <Tooltip content="Save changes" side="bottom">
+                  <button
+                    onClick={handleSave}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save</span>
+                  </button>
+                </Tooltip>
+                <Tooltip content="Discard changes" side="bottom">
+                  <button
+                    onClick={handleReset}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+                </Tooltip>
+              </>
+            )}
+            <Tooltip content={copied ? "Copied" : "Copy code"} side="bottom">
+              <button
+                onClick={handleCopy}
+                className="p-1 hover:bg-gray-300 dark:hover:bg-gray-700 rounded transition-colors text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </Tooltip>
+            {tabBarExtraContent}
+          </div>
         </div>
 
         {/* Editor */}
         <div className="min-h-0 flex-1">
           <CodeEditorPanel
             file={activeFile}
-            code={files[activeFile] || ''}
+            code={unsavedChanges[activeFile] !== undefined ? unsavedChanges[activeFile] : (files[activeFile] || '')}
             readOnly={readOnly}
             isComplete={isComplete}
             onChange={handleCodeChange}
+            searchQuery={searchQuery}
           />
         </div>
       </div>

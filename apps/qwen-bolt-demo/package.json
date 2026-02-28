@@ -1,5 +1,5 @@
 {
-  "name": "qwen-bolt-demo",
+  "name": "qwen-coder",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -20,7 +20,7 @@
     "@codemirror/state": "^6.5.4",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.39.11",
-    "@qwen-code/sdk": "^0.1.1",
+    "@qwen-code/sdk": "^0.1.4",
     "@webcontainer/api": "^1.6.1",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.11.0",
@@ -29,18 +29,18 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
-    "http-proxy": "^1.18.1",
+    "i18next": "^25.8.5",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "i18next-http-backend": "^3.0.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.454.0",
     "next": "15.1.4",
     "next-themes": "^0.4.4",
-    "node-pty": "^1.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "react-i18next": "^16.5.4",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {

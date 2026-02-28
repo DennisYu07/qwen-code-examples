@@ -1,16 +1,28 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Message, AttachedFile } from '@/components/workspace';
 import type { ProjectSettings } from '@/contexts/ProjectContext';
 import { useToken } from '@/contexts/TokenContext';
+import { useProject } from '@/contexts/ProjectContext';
+import { saveChatSession, getChatSession } from '@/lib/chat-persistence';
+import logger from '@/lib/logger';
 
 interface UseChatProps {
   settings: ProjectSettings;
   sessionId: string;
   setSessionId: (id: string) => void;
-  loadAllFiles: (id: string) => Promise<void>;
+  loadAllFiles: (sessionId?: string) => Promise<void>;
+  onFileUpdate?: (path: string, content: string) => void;
+  files: Record<string, string>;
+  onFilesLoaded?: (files: Record<string, string>) => void;
+  onTurnComplete?: (assistantMessageId: string, responseText: string) => void;
 }
 
-export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: UseChatProps) {
+export function useChat({ settings: propsSettings, sessionId, setSessionId, loadAllFiles, onFileUpdate, files, onFilesLoaded, onTurnComplete }: UseChatProps) {
+  // Directly access Context to ensure we always have the latest state, bypassing any prop propagation delays
+  const { settings: contextSettings } = useProject();
+  // Prefer context settings if available (which it should be), fallback to props
+  const settings = contextSettings || propsSettings;
+
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,12 +32,83 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
   const { addTokenUsage } = useToken();
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const sendMessage = useCallback(async (messageText?: string) => {
+  const stop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsLoading(false);
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  // Load chat history from IndexedDB when sessionId changes
+  useEffect(() => {
+    async function loadHistory() {
+      if (sessionId && messages.length === 0) {
+        try {
+          const session = await getChatSession(sessionId);
+          if (session) {
+            if (session.messages.length > 0) {
+              setMessages(session.messages);
+            }
+            if (session.files && Object.keys(session.files).length > 0 && onFilesLoaded) {
+               const { filterExcludedFiles } = await import('@/lib/file-utils');
+               onFilesLoaded(filterExcludedFiles(session.files));
+            }
+          }
+        } catch (e) {
+          logger.error('[useChat] Failed to load chat history:', e);
+        }
+      }
+    }
+    loadHistory();
+  }, [sessionId]);
+
+  // Save chat history to IndexedDB when messages change
+  useEffect(() => {
+    async function saveHistory() {
+      if (sessionId && messages.length > 0) {
+        try {
+          // Use the first user message as title, or "New Chat"
+          const firstUserMsg = messages.find(m => m.role === 'user');
+          const titleContent = firstUserMsg?.content || 'New Chat';
+          const title = titleContent.slice(0, 50) + (titleContent.length > 50 ? '...' : '');
+          
+          const existing = await getChatSession(sessionId);
+          const createdAt = existing?.createdAt || Date.now();
+
+          await saveChatSession({
+            id: sessionId,
+            title,
+            createdAt, // Preserve creation time
+            updatedAt: Date.now(),
+            messages,
+            files
+          });
+        } catch (e) {
+          logger.error('[useChat] Failed to save chat history:', e);
+        }
+      }
+    }
+    // Debounce save
+    const timer = setTimeout(saveHistory, 1000);
+    return () => clearTimeout(timer);
+  }, [messages, sessionId, files]);
+
+  // Use a ref to track the latest settings to avoid closure staleness issues
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  const sendMessage = useCallback(async (messageText?: string, extraFiles?: AttachedFile[]) => {
     const textToSend = messageText || input.trim();
     if (!textToSend || isLoading) return;
 
-    const currentAttachedFiles = [...attachedFiles];
-
+    // Use current settings from ref
+    const currentSettings = settingsRef.current;
+    
+    // Merge extra files (e.g. from home page restore) with current attached files
+    const currentAttachedFiles = extraFiles ? [...attachedFiles, ...extraFiles] : [...attachedFiles];
     const userMessage: Message = {
       id: `user_${Date.now()}`,
       role: 'user',
@@ -42,9 +125,11 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
 
     abortControllerRef.current = new AbortController();
 
+    let accumulatedResponse = '';
+
     try {
       const allUploadedFiles = [
-        ...settings.uploadedFiles,
+        ...currentSettings.uploadedFiles,
         ...attachedFiles.map(f => ({
           id: f.id,
           name: f.name,
@@ -63,8 +148,9 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
           history: messages,
           sessionId: sessionId || undefined,
           uploadedFiles: allUploadedFiles,
-          knowledge: settings.knowledge,
-          modelConfig: settings.modelConfig,
+          knowledge: currentSettings.knowledge,
+          modelConfig: currentSettings.modelConfig,
+          workspaceFiles: files,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -72,33 +158,59 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
       if (response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let accumulatedResponse = '';
         let hasReceivedResult = false;
         let currentSessionId = sessionId;
+        let buffer = '';
+        let currentEvent = 'message';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += chunk;
+          
+          const lines = buffer.split('\n');
+          // Keep the last line in the buffer as it might be incomplete
+          buffer = lines.pop() || '';
 
-          for (const line of lines) {
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for event type
+            if (line.startsWith('event: ')) {
+               currentEvent = line.slice(7).trim();
+               continue;
+            }
+
             if (line.startsWith('data: ')) {
               const jsonStr = line.slice(6);
               if (jsonStr.trim()) {
                 try {
                   const parsed = JSON.parse(jsonStr);
 
+                   // Handle file write events from backend MCP Server
+                  if (currentEvent === 'file' && (parsed.type === 'file_write' || parsed.type === 'file_update')) {
+                     if (onFileUpdate) {
+                       onFileUpdate(parsed.path, parsed.content);
+                     }
+                     currentEvent = 'message';
+                     continue;
+                  }
+
                   if (parsed.type === 'session_info') {
                     currentSessionId = parsed.sessionId;
                     setSessionId(parsed.sessionId);
                   }
 
-                  if (parsed.type === 'file_updated') {
-                    if (currentSessionId) {
-                      loadAllFiles(currentSessionId);
-                    }
+                  if (parsed.type === 'auth_required') {
+                    const authMsg: Message = {
+                      id: `auth_${Date.now()}`,
+                      role: 'assistant',
+                      content: `**Authorization Required**\n\nPlease [click here to authorize the application](${parsed.url}).\n\nAfter you have authorized in the new window, this chat will continue automatically.`,
+                      timestamp: new Date(),
+                    };
+                    setMessages(prev => [...prev, authMsg]);
                   }
 
                   if (parsed.type === 'result') {
@@ -112,11 +224,10 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
                       }
                     }
 
-                    if (currentSessionId) {
-                      setTimeout(() => {
-                        loadAllFiles(currentSessionId);
-                      }, 1000);
-                    }
+                    // Sync files from WebContainer FS after turn completes
+                    setTimeout(() => {
+                      loadAllFiles();
+                    }, 500);
                     break;
                   }
 
@@ -134,7 +245,7 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
                     }
                   }
                 } catch (e) {
-                  console.error('Error parsing JSON:', e);
+                  logger.error('Error parsing JSON:', e);
                 }
               }
             }
@@ -142,26 +253,34 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
 
           if (hasReceivedResult) break;
         }
-
-        if (accumulatedResponse) {
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+      } else if (error instanceof Error) {
+        logger.error('Error sending message:', error);
+      }
+    } finally {
+      if (accumulatedResponse) {
+          const assistantMessageId = `assistant_${Date.now()}`;
           const assistantMessage: Message = {
-            id: `assistant_${Date.now()}`,
+            id: assistantMessageId,
             role: 'assistant',
             content: accumulatedResponse,
             timestamp: new Date(),
           };
           setMessages(prev => [...prev, assistantMessage]);
-        }
+
+          // Notify parent to create a version snapshot after files sync
+          if (onTurnComplete) {
+            setTimeout(() => {
+              onTurnComplete(assistantMessageId, accumulatedResponse);
+            }, 800);
+          }
       }
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Error sending message:', error);
-      }
-    } finally {
       setIsLoading(false);
       setCurrentResponse('');
     }
-  }, [input, isLoading, attachedFiles, messages, sessionId, settings, loadAllFiles, setSessionId, addTokenUsage]);
+  }, [input, isLoading, attachedFiles, messages, sessionId, settings, loadAllFiles, setSessionId, addTokenUsage, onTurnComplete]);
 
   return {
     input,
@@ -173,6 +292,7 @@ export function useChat({ settings, sessionId, setSessionId, loadAllFiles }: Use
     attachedFiles,
     setAttachedFiles,
     sendMessage,
-    abortControllerRef
+    abortControllerRef,
+    stop
   };
 }
